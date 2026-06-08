@@ -12,6 +12,7 @@ Read this file first. Do not re-derive product behavior from `docs/tz.md` (legac
 | 4 | `docs/adr/` | ADR-001 delivery, ADR-002 licensing, [ADR-003 containers](docs/adr/003-container-strategy.md) |
 | 5 | [docs/plans/2026-06-08-001-feat-fm21-greenfield-plan.md](docs/plans/2026-06-08-001-feat-fm21-greenfield-plan.md) | Implementation units U1–U11, KTD decisions |
 | 6 | `spec/acceptance.yaml` | Machine-verifiable acceptance (**U3**) |
+| 6b | [docs/openapi.yaml](docs/openapi.yaml) | Phase 1 listener HTTP API — geo + metadata (**U3**) |
 | 7 | `docs/solutions/` | Compound learnings after each slice (R29) |
 
 **Implementation authority:** contracts + `spec/acceptance.yaml` + plan KTD table. `docs/tz.md` is context only.
@@ -142,4 +143,5 @@ tests/         pytest + agent-browser e2e
 - **U1 done:** Strategy, this file, README, `.env.example`, scaffolding ignores
 - **U2 done:** ADR-001/002, behavior contracts (`docs/contracts/`)
 - **ADR-003 done:** Container strategy (monorepo, images everywhere, Compose dev-only)
-- **Next:** U3 — acceptance spec (`spec/acceptance.yaml`) + OpenAPI
+- **U3 done:** Acceptance spec (`spec/acceptance.yaml`), OpenAPI (`docs/openapi.yaml`), contract cross-links
+- **Next:** U4 — Docker dev stack (Liquidsoap + Icecast + Redis)

@@ -156,12 +156,15 @@ Phase 1 dev: all users with bot access treated as operators; admin commands stub
 
 ## 8. Acceptance mapping
 
-| Example | Sections |
-|---------|----------|
-| AE1 — Moscow ad, SPB silent | §4, §6 |
-| AE2 — Ad after current block | Broadcast Semantics (bot only enqueues; no interrupt) |
-| Sixth ad rejected | §4 limits |
-| R18 — City confirm before enqueue | §4 |
+Machine-verifiable entries: [spec/acceptance.yaml](../../spec/acceptance.yaml).
+
+| Example | Spec ID | Sections |
+|---------|---------|----------|
+| AE1 — Moscow ad, SPB silent | [AE1](../../spec/acceptance.yaml) | §4, §6 |
+| AE2 — Ad after current block | [AE2](../../spec/acceptance.yaml) | Broadcast Semantics (bot only enqueues; no interrupt) |
+| Sixth ad rejected | [AE-QUEUE-FULL](../../spec/acceptance.yaml) | §4 limits |
+| `all` fan-out | [AE-ALL-FANOUT](../../spec/acceptance.yaml) | §3, §4 |
+| R18 — City confirm before enqueue | AE1, AE-ALL-FANOUT | §4 |
 
 ---
 

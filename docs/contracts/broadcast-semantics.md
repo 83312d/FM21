@@ -225,12 +225,15 @@ See [ADR-001 Appendix A](../adr/001-delivery-model.md#appendix-a--liquidsoap-con
 
 ## 10. Acceptance mapping
 
-| Example | Contract sections |
-|---------|-------------------|
-| AE1 — Moscow ad not on SPB | §2, §5 |
-| AE2 — Ad waits for news block | §3, §4 |
-| AE3 — News play count / cache | §4 (news scheduling) |
-| Sixth ad rejected | §6 |
+Machine-verifiable entries: [spec/acceptance.yaml](../../spec/acceptance.yaml).
+
+| Example | Spec ID | Contract sections |
+|---------|---------|-------------------|
+| AE1 — Moscow ad not on SPB | [AE1](../../spec/acceptance.yaml) | §2, §5 |
+| AE2 — Ad waits for news block | [AE2](../../spec/acceptance.yaml) | §3, §4 |
+| AE3 — News play count / cache | [AE3](../../spec/acceptance.yaml) | §4 (news scheduling) |
+| Sixth ad rejected | [AE-QUEUE-FULL](../../spec/acceptance.yaml) | §6 |
+| `all` fan-out | [AE-ALL-FANOUT](../../spec/acceptance.yaml) | §5 |
 
 ---
 
