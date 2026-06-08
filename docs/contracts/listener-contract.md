@@ -97,6 +97,8 @@ Optional player copy (not blocking): «Общий эфир — вы подклю
 
 ## 6. Now playing (R14, KTD-3)
 
+**OpenAPI:** [docs/openapi.yaml](../openapi.yaml) — `GET /api/now-playing/{cityTag}`.
+
 - Poll `GET /api/now-playing/{cityTag}` every **5 seconds** while playing.
 - Display: title, artist (if applicable), content type label: `music` | `news` | `ad`.
 - If metadata API fails, keep audio playing; show last known or placeholder text.
@@ -124,6 +126,8 @@ CSS variables (from legacy brief, still binding):
 
 ## 8. Geo API responses
 
+**OpenAPI:** [docs/openapi.yaml](../openapi.yaml) — `GET /api/geo/detect`, `GET /api/geo/reverse`.
+
 ### `GET /api/geo/detect`
 
 Response:
@@ -148,12 +152,15 @@ Missing GeoIP database → `source: "default"`, `city_tag` from `DEFAULT_CITY_TA
 
 ## 9. Acceptance mapping
 
-| Example | Sections |
-|---------|----------|
-| AE4 — Badge without modal, Play available | §3 |
-| AE5 — Late joiner misses past orders | §5 |
-| AE6 — Background playback | §4 |
-| R37 — Detect, badge, correct mount, now-playing | §3, §4, §6 |
+Machine-verifiable entries: [spec/acceptance.yaml](../../spec/acceptance.yaml).
+
+| Example | Spec ID | Sections |
+|---------|---------|----------|
+| AE4 — Badge without modal, Play available | [AE4](../../spec/acceptance.yaml) | §3 |
+| AE5 — Late joiner misses past orders | [AE5](../../spec/acceptance.yaml) | §5 |
+| AE6 — Background playback | [AE6](../../spec/acceptance.yaml) | §4 |
+| City switch reconnect | [AE-CITY-SWITCH](../../spec/acceptance.yaml) | §4 |
+| R37 — Detect, badge, correct mount, now-playing | [AE4](../../spec/acceptance.yaml), [AE-CITY-SWITCH](../../spec/acceptance.yaml), [AE-NOW-PLAYING](../../spec/acceptance.yaml) | §3, §4, §6 |
 
 ---
 

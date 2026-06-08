@@ -1,0 +1,359 @@
+openapi: 3.1.0
+info:
+  title: FM21 Listener API
+  version: 0.1.0
+  description: |
+    Phase 1 public listener-facing HTTP API exposed via the gateway.
+
+    Geo endpoints implement [Listener Contract §8](docs/contracts/listener-contract.md#8-geo-api-responses).
+    Now-playing reads `fm21:current:{cityTag}` per [Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model).
+
+    **Not in this spec:** `POST /internal/enqueue` is internal-only ([Broadcast Semantics §8](docs/contracts/broadcast-semantics.md#8-internal-enqueue-api)) — not exposed on the public gateway.
+
+servers:
+  - url: http://localhost:8080
+    description: Development gateway (static web + reverse proxy to geo/metadata services)
+  - url: https://fm21.example
+    description: Production gateway — TLS required for all listener-facing APIs ([Listener Contract §10](docs/contracts/listener-contract.md#10-transport-and-privacy))
+
+tags:
+  - name: geo
+    description: City detection for the web player ([Listener Contract §3](docs/contracts/listener-contract.md#3-city-detection-order-r1))
+  - name: metadata
+    description: Now-playing metadata polled independently of the ICY stream ([Listener Contract §6](docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3))
+  - name: health
+    description: Liveness probe for the gateway stack
+
+paths:
+  /api/geo/detect:
+    get:
+      operationId: geoDetect
+      tags: [geo]
+      summary: Detect city from client IP
+      description: |
+        IP-based GeoIP fallback in the city detection chain
+        ([Listener Contract §3](docs/contracts/listener-contract.md#3-city-detection-order-r1),
+        [§8](docs/contracts/listener-contract.md#8-geo-api-responses)).
+
+        **Privacy** ([Listener Contract §10](docs/contracts/listener-contract.md#10-transport-and-privacy)):
+        do not persist client IP beyond request scope; log only `city_tag` and `source`.
+
+        **Trusted proxy:** gateway is the sole trusted forwarder; geo service derives
+        client IP from `X-Forwarded-For` only when the request arrives from the gateway,
+        not from arbitrary client-supplied headers.
+
+        When the GeoIP database is unavailable, returns `source: "default"` with
+        `city_tag` from `DEFAULT_CITY_TAG` — graceful degradation, no error response.
+
+        Rate limiting is deferred to production hardening (U11); Phase 1 should still
+        avoid unbounded reverse-geocode abuse.
+      responses:
+        "200":
+          description: Resolved city for the requesting client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoCityResponse"
+              examples:
+                geoipHit:
+                  summary: GeoIP match (Listener Contract §8)
+                  value:
+                    city_tag: moscow
+                    city_name: Москва
+                    source: geoip
+                defaultFallback:
+                  summary: GeoIP DB missing or no match
+                  value:
+                    city_tag: moscow
+                    city_name: Москва
+                    source: default
+
+  /api/geo/reverse:
+    get:
+      operationId: geoReverse
+      tags: [geo]
+      summary: Reverse geocode coordinates to city
+      description: |
+        Maps `navigator.geolocation` coordinates to a broadcast city
+        ([Listener Contract §3](docs/contracts/listener-contract.md#3-city-detection-order-r1),
+        [§8](docs/contracts/listener-contract.md#8-geo-api-responses)).
+
+        On lookup failure, returns the same shape with `source: "default"` and
+        `city_tag` from `DEFAULT_CITY_TAG` — no error screen for the listener.
+
+        **Privacy:** response MUST NOT echo `lat`/`lon` or client IP; do not persist
+        coordinates beyond request scope ([Listener Contract §10](docs/contracts/listener-contract.md#10-transport-and-privacy)).
+      parameters:
+        - $ref: "#/components/parameters/latitude"
+        - $ref: "#/components/parameters/longitude"
+      responses:
+        "200":
+          description: Resolved city for the given coordinates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoCityResponse"
+              examples:
+                reverseHit:
+                  summary: Reverse geocode match
+                  value:
+                    city_tag: spb
+                    city_name: Санкт-Петербург
+                    source: reverse
+                reverseDefault:
+                  summary: Reverse lookup failed
+                  value:
+                    city_tag: moscow
+                    city_name: Москва
+                    source: default
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/now-playing/{cityTag}:
+    get:
+      operationId: getNowPlaying
+      tags: [metadata]
+      summary: Current on-air metadata for a city
+      description: |
+        Returns the block currently airing on the city's mount. The metadata service
+        reads Redis hash `fm21:current:{cityTag}`
+        ([Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model)).
+
+        The web player polls this endpoint every 5 seconds while playing
+        ([Listener Contract §6](docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3)).
+        Audio playback is independent — metadata outage must not stop the stream.
+      parameters:
+        - $ref: "#/components/parameters/cityTag"
+      responses:
+        "200":
+          description: Current block metadata for the city
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NowPlayingResponse"
+              examples:
+                music:
+                  summary: Static music filler on air
+                  value:
+                    city_tag: moscow
+                    title: Evening Drive
+                    artist: FM21 Static Bed
+                    content_type: music
+                    started_at: "2026-06-08T18:30:00Z"
+                    duration_sec: 240
+                ad:
+                  summary: Geo-targeted voice ad
+                  value:
+                    city_tag: moscow
+                    title: Voice ad
+                    content_type: ad
+                    started_at: "2026-06-08T18:34:12Z"
+                    duration_sec: 42
+                news:
+                  summary: News pair (Phase 2+)
+                  value:
+                    city_tag: spb
+                    title: IT news headline
+                    content_type: news
+                    started_at: "2026-06-08T19:00:05Z"
+                    duration_sec: 90
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/health:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Gateway health check
+      description: |
+        Simple liveness endpoint for the public gateway. MUST NOT expose dependency
+        topology, versions, queue depth, or Redis keys — `status` only.
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+
+components:
+  parameters:
+    latitude:
+      name: lat
+      in: query
+      required: true
+      description: WGS-84 latitude in decimal degrees
+      schema:
+        type: number
+        format: double
+        minimum: -90
+        maximum: 90
+      example: 55.7558
+    longitude:
+      name: lon
+      in: query
+      required: true
+      description: WGS-84 longitude in decimal degrees
+      schema:
+        type: number
+        format: double
+        minimum: -180
+        maximum: 180
+      example: 37.6173
+    cityTag:
+      name: cityTag
+      in: path
+      required: true
+      description: |
+        Active broadcast city slug. Phase 1 values are defined in
+        `broadcast/liquidsoap/cities.yaml` (`moscow`, `spb`).
+      schema:
+        $ref: "#/components/schemas/CityTag"
+      example: moscow
+
+  schemas:
+    CityTag:
+      type: string
+      description: |
+        Canonical city slug from `broadcast/liquidsoap/cities.yaml`.
+        Phase 1 active cities: `moscow`, `spb`. Enum MUST stay in sync with that
+        file until a later unit generates the schema from the canonical list.
+      enum:
+        - moscow
+        - spb
+      examples:
+        - moscow
+        - spb
+
+    GeoSource:
+      type: string
+      description: |
+        How the city was resolved ([Listener Contract §8](docs/contracts/listener-contract.md#8-geo-api-responses)).
+      enum:
+        - geoip
+        - reverse
+        - default
+
+    ContentType:
+      type: string
+      description: |
+        Listener-facing content label
+        ([Listener Contract §6](docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3)).
+        Maps from broadcast queue `type` in `fm21:current:{cityTag}`
+        ([Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model)):
+        `MUSIC` / `MUSIC_ORDER` → `music`, `NEWS_PAIR` → `news`, `AD` → `ad`.
+      enum:
+        - music
+        - news
+        - ad
+
+    GeoCityResponse:
+      type: object
+      required: [city_tag, city_name, source]
+      description: |
+        Geo detection result ([Listener Contract §8](docs/contracts/listener-contract.md#8-geo-api-responses)).
+        MUST NOT include client IP, latitude, or longitude.
+      properties:
+        city_tag:
+          $ref: "#/components/schemas/CityTag"
+        city_name:
+          type: string
+          description: Human-readable city name for the player badge (e.g. «Москва»)
+          examples:
+            - Москва
+            - Санкт-Петербург
+        source:
+          $ref: "#/components/schemas/GeoSource"
+
+    NowPlayingResponse:
+      type: object
+      required: [city_tag, title, content_type, started_at, duration_sec]
+      description: |
+        Current on-air block exposed to listeners. Sourced from Redis
+        `fm21:current:{cityTag}` ([Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model)).
+      properties:
+        city_tag:
+          $ref: "#/components/schemas/CityTag"
+        title:
+          type: string
+          description: Display title for the current block
+          examples:
+            - Evening Drive
+            - Voice ad
+        artist:
+          type: string
+          description: Artist name when applicable (music blocks); omitted for ads and news
+          examples:
+            - FM21 Static Bed
+        content_type:
+          $ref: "#/components/schemas/ContentType"
+        started_at:
+          type: string
+          format: date-time
+          description: UTC timestamp when the current block started airing
+        duration_sec:
+          type: integer
+          minimum: 1
+          description: Total duration of the current block in seconds
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          description: Liveness indicator
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code or short message
+          examples:
+            - invalid_coordinates
+            - unknown_city
+        message:
+          type: string
+          description: |
+            Optional human-readable detail for listeners. MUST NOT include filesystem
+            paths, env var names, Redis keys, stack traces, or internal hostnames.
+
+  responses:
+    BadRequest:
+      description: |
+        Invalid request parameters — e.g. missing, non-numeric, or out-of-range
+        `lat` / `lon` on `/api/geo/reverse`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            invalidCoordinates:
+              value:
+                error: invalid_coordinates
+                message: "lat and lon must be valid WGS-84 decimal degrees"
+
+    NotFound:
+      description: |
+        Unknown or inactive `cityTag` on `/api/now-playing/{cityTag}`
+        (not listed in `broadcast/liquidsoap/cities.yaml`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            unknownCity:
+              value:
+                error: unknown_city
+                message: "cityTag is not an active broadcast city"
+            invalidCityTag:
+              value:
+                error: unknown_city
+                message: "cityTag is not an active broadcast city"

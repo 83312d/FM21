@@ -1,0 +1,282 @@
+# FM21 acceptance traceability spec — machine-parseable criteria for agents and CI.
+# Verification runners bind to pytest/e2e targets in U4–U8; Phase 2+ entries are deferred.
+
+version: "1.0.0"
+source_docs:
+  - docs/brainstorms/2026-06-08-fm21-requirements.md
+  - docs/plans/2026-06-08-001-feat-fm21-greenfield-plan.md
+  - docs/contracts/broadcast-semantics.md
+  - docs/contracts/listener-contract.md
+  - docs/contracts/operator-contract.md
+  - docs/openapi.yaml
+last_updated: "2026-06-08"
+
+acceptance:
+
+  - id: AE1
+    title: Moscow voice ad isolated from Saint Petersburg stream
+    covers: [R2, R36]
+    phase: 1
+    given:
+      - Streams for city_tag moscow and city_tag spb are live and playing
+      - Both mounts serve continuous audio from independent queues
+    when:
+      - Operator enqueues a voice ad (type AD) targeted at moscow
+      - Ad is confirmed and accepted by injector (HTTP 201)
+    then:
+      - Moscow listener hears the ad after the current block ends (no interrupt)
+      - Saint Petersburg listener does not hear the ad at any time
+      - fm21:queue:moscow contains the ad item; fm21:queue:spb does not
+      - fm21:current:spb never reports content_type ad with the Moscow ad title within 60s of enqueue
+      - GET /api/now-playing/spb content_type stays music while Moscow ad airs on moscow mount
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#2-city-isolation
+      - docs/contracts/broadcast-semantics.md#3-block-model
+      - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
+    verification:
+      - pytest: tests/test_injector.py (moscow enqueue absent from spb list)
+      - e2e: tests/e2e/geo-isolation.spec.ts (dual-browser tab isolation)
+      - manual: two browser tabs on /moscow and /spb mounts after Telegram voice ad
+      - redis-check: LLEN/scan fm21:queue:moscow vs fm21:queue:spb after enqueue
+    units: [U5, U7, U8]
+
+  - id: AE2
+    title: Voice ad waits for current news block — no interrupt
+    covers: [R5, R6]
+    phase: 2
+    deferred: true
+    note: Phase 2+ — requires NEWS_PAIR blocks and mixed-type queue dequeue (U10)
+    given:
+      - A news segment (NEWS_PAIR block) is currently playing on a city mount
+      - Broadcast consumer is mid-block; dequeue suspended per no-interrupt rule
+    when:
+      - Operator submits a voice ad for the same city
+      - Injector accepts the ad (queue not full)
+    then:
+      - Ad enters pending queue at AD priority (100)
+      - Current news block plays to completion without interruption
+      - Ad plays only after the news block ends (and any higher-priority FIFO ordering within AD tier)
+      - Stinger and news within NEWS_PAIR remain atomic — nothing inserts between them
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#3-block-model
+      - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
+      - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
+    verification:
+      - pytest: tests/test_injector.py (enqueue during simulated NEWS_PAIR — deferred U10)
+      - integration: log tail of Liquidsoap + redis queue order during news playback
+      - manual: submit voice ad during live news block; confirm no audio cut
+    units: [U5, U10]
+
+  - id: AE3
+    title: News item play cap and cached audio reuse
+    covers: [R7, R8]
+    phase: 2
+    deferred: true
+    note: Phase 3 news pipeline — 15-minute cron, TTS, play-count persistence (U10)
+    given:
+      - A specific news item has been played 3 times in the last 24 hours for a city
+      - 15-minute news slot fires for that city
+      - Other eligible news items exist in the catalog
+    when:
+      - News scheduler selects content for the slot
+    then:
+      - A different eligible news item is selected when available
+      - If the same item must repeat (no alternatives), cached audio is reused without new TTS synthesis
+      - Play count tracking respects max 3 plays per 24h per item hash
+      - NEWS_PAIR enqueued at priority 80 after current block ends
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
+    verification:
+      - pytest: news scheduler unit tests (deferred U10)
+      - redis-check: fm21:news:played:{hash} counts and TTL
+      - manual: force 3 plays then observe 4th slot selection and TTS call count
+    units: [U10]
+
+  - id: AE4
+    title: City badge with change control — no blocking modal on geo denial
+    covers: [R1, R4]
+    phase: 1
+    given:
+      - Listener denies browser geolocation permission
+      - IP GeoIP fallback resolves to Moscow (source geoip or default)
+      - Player page loads at gateway (no ?city= override)
+    when:
+      - Player initialization completes city detection flow
+      - Listener views the player UI before tapping Play
+    then:
+      - City badge displays human-readable name «Москва»
+      - Visible city change control is present (dropdown or equivalent)
+      - Play button is available immediately — no blocking confirmation modal
+      - No modal blocks playback pending geo consent beyond standard browser permission
+      - On Play, audio connects to moscow ICY mount
+    contract_refs:
+      - docs/contracts/listener-contract.md#3-city-detection-order-r1
+      - docs/openapi.yaml#/paths/~1api~1geo~1detect
+    verification:
+      - e2e: tests/e2e/geo-isolation.spec.ts (denied geolocation scenario)
+      - pytest: tests/test_geo.py (Moscow IP fallback response shape)
+      - manual: deny geolocation in browser; confirm badge and Play without modal
+    units: [U6, U7]
+
+  - id: AE5
+    title: Synchronous radio — late joiner misses already-played orders
+    covers: []
+    covers_decision: synchronous-radio
+    phase: 2
+    deferred: true
+    note: Requirements AE5 traces to Key Decision (sync radio), not a standalone R-ID. Full /order flow in U9.
+    given:
+      - Ivan orders a song via bot on Moscow stream at 14:03
+      - Song enqueues as MUSIC_ORDER and plays on shared Moscow timeline
+      - Petya opens the player and starts listening at 14:05
+      - Ordered track finished airing before 14:05
+    when:
+      - Petya taps Play and connects to live Moscow mount edge
+    then:
+      - Petya hears whatever is currently on air at 14:05 — not a rewind
+      - Petya does not hear Ivan's order unless it is still queued or currently playing at connect time
+      - Mid-block join is normal — late joiner enters mid-track if block still airing
+    contract_refs:
+      - docs/contracts/listener-contract.md#5-synchronous-radio-ux-fg3-ae5
+      - docs/contracts/broadcast-semantics.md#2-city-isolation
+    verification:
+      - manual: staged order at T0; second listener connects at T+2min after track ends
+      - e2e: deferred — requires /order activation (U9)
+    units: [U7, U9]
+
+  - id: AE6
+    title: Background tab playback continues without re-interaction
+    covers: [R16]
+    phase: 1
+    given:
+      - Listener has tapped Play; ICY stream is actively playing
+      - Browser tab is backgrounded (document.hidden === true)
+    when:
+      - Tab remains hidden for at least 60 seconds (CI) or 10 minutes (release checklist)
+    then:
+      - Audio continues without pause triggered by visibility change
+      - Listener is not required to click Play again on return to tab
+      - Metadata polling may slow when hidden; audio stream must not stop
+    contract_refs:
+      - docs/contracts/listener-contract.md#4-stream-connection-r2-ktd-2
+    verification:
+      - e2e: tests/e2e/geo-isolation.spec.ts (hidden 60s, assert audio not paused — CI gate)
+      - manual: Play → switch tab 10 min → confirm audio on return (Chrome, Firefox, Safari)
+    units: [U7]
+
+  - id: AE-NOW-PLAYING
+    title: Now-playing metadata displayed while stream plays
+    covers: [R14, R37]
+    phase: 1
+    given:
+      - Listener has tapped Play on the correct city mount
+      - Metadata service has current block in fm21:current:{cityTag}
+    when:
+      - Player polls GET /api/now-playing/{cityTag} every 5 seconds
+      - On-air block changes (e.g. music to ad on moscow mount)
+    then:
+      - UI shows title, content type label (music / news / ad), and artist when applicable
+      - Display updates within one poll interval (5s) after Redis current block changes
+      - Audio continues if metadata API fails; last known or placeholder text shown
+    contract_refs:
+      - docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3
+      - docs/openapi.yaml#/paths/~1api~1now-playing~1{cityTag}
+    verification:
+      - e2e: tests/e2e/geo-isolation.spec.ts (now-playing DOM updates after block change)
+      - pytest: tests/test_metadata.py (response shape matches NowPlayingResponse)
+      - manual: confirm title/type visible during playback
+    units: [U7]
+
+  - id: AE-GEO-PRIVACY
+    title: Geo endpoints do not persist or echo raw coordinates or client IP
+    covers: [R1]
+    phase: 1
+    given:
+      - Listener calls GET /api/geo/reverse with lat and lon query params
+      - Or GET /api/geo/detect from a client IP
+    when:
+      - Geo service processes the request and returns GeoCityResponse
+    then:
+      - Response body contains only city_tag, city_name, source — no IP or coordinates echoed
+      - Service does not persist raw lat/lon or client IP beyond request scope
+      - Logs record only resolved city_tag and source (per Listener Contract §10)
+    contract_refs:
+      - docs/contracts/listener-contract.md#10-transport-and-privacy
+      - docs/openapi.yaml#/paths/~1api~1geo~1detect
+      - docs/openapi.yaml#/paths/~1api~1geo~1reverse
+    verification:
+      - pytest: tests/test_geo.py (response shape; no PII fields)
+      - manual: inspect service logs for redacted coordinates and IP
+    units: [U6]
+
+  - id: AE-QUEUE-FULL
+    title: Sixth pending AD rejected with HTTP 409
+    covers: [R9]
+    phase: 1
+    given:
+      - Five AD items are already pending in fm21:queue:moscow
+      - Pending count uses type AD scan (not raw LLEN) per broadcast contract
+    when:
+      - Operator or internal caller attempts to enqueue a 6th AD for moscow
+    then:
+      - Injector returns HTTP 409 with error payload indicating queue full
+      - No 6th item is written to Redis
+      - Concurrent enqueue attempts cannot exceed 5 pending ADs (atomic check + LPUSH)
+    bot_then:
+      - Telegram bot surfaces operator message «Очередь объявлений для {city} заполнена» (U8)
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#6-enqueue-limits
+      - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
+    verification:
+      - pytest: tests/test_injector.py (6th ad → 409)
+      - curl: POST /internal/enqueue with X-FM21-Internal-Token after seeding 5 ADs
+      - redis-check: AD count remains 5 after rejected attempt
+    units: [U5, U8]
+
+  - id: AE-ALL-FANOUT
+    title: city_tag all fans out independent copy per active city
+    covers: [R3]
+    phase: 1
+    given:
+      - Active cities in cities.yaml are moscow and spb
+      - Neither city's AD queue is at capacity (< 5 pending ADs each)
+    when:
+      - Operator enqueues AD with city_tag all (e.g. via /city all + voice confirm «Все города»)
+    then:
+      - Injector LPUSHes an independent copy to fm21:queue:moscow and fm21:queue:spb
+      - Each copy has a unique id; stored city_tag is the target city (not all)
+      - Same uri and meta across copies; each mount plays on its own timeline after current block
+      - If any active city queue is at AD capacity, entire request rejected HTTP 409 (all-or-nothing)
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#5-city_tag--all-fan-out-fg1
+      - docs/contracts/operator-contract.md#3-operator-city-context
+    verification:
+      - pytest: tests/test_injector.py (all fan-out present in both lists, unique ids)
+      - pytest: tests/test_injector.py (partial capacity → 409, no partial fan-out)
+      - redis-check: both queues contain AD with same uri, different id
+    units: [U5, U8]
+
+  - id: AE-CITY-SWITCH
+    title: City change reconnects to live edge within 2 seconds
+    covers: [R1, R4]
+    phase: 1
+    given:
+      - Listener is playing moscow mount
+      - Playback is active (audio element playing)
+    when:
+      - Listener changes city to spb via badge change control
+    then:
+      - Previous audio source disconnects immediately
+      - New src points to /spb mount
+      - play() invoked on new source when prior session was active
+      - Reconnect completes within 2 seconds under normal network conditions
+      - Listener hears live edge of SPB stream — not rewind to block start
+      - If play() rejected by browser, non-blocking «Нажмите Play» prompt shown (not modal)
+      - localStorage fm21_city updated to spb
+    contract_refs:
+      - docs/contracts/listener-contract.md#4-stream-connection-r2-ktd-2
+      - docs/openapi.yaml#/paths/~1api~1now-playing~1{cityTag}
+    verification:
+      - e2e: tests/e2e/geo-isolation.spec.ts (city switch timing assertion)
+      - manual: switch moscow → spb during playback; measure reconnect < 2s
+    units: [U7]
