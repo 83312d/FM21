@@ -1,0 +1,10 @@
+.compound-engineering/*.local.yaml
+
+# Secrets and local env
+.env
+
+# Runtime-generated ads (voice transcodes)
+data/ads/*
+
+# Node (agent-browser e2e)
+node_modules/
