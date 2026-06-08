@@ -45,7 +45,7 @@ Carried from origin (see `docs/brainstorms/2026-06-08-fm21-requirements.md`):
 | KTD-7 | **Phase 1 static music catalog** on disk/S3 | Proves geo before Yandex OAuth complexity (R35); Yandex adapter in Phase 2 |
 | KTD-11 | **Docker images for all environments** | Every component (broadcast, glue, web, test runners) ships as an image; dev, CI, staging, prod run containers — no host Python/Node/ffmpeg (R38) |
 | KTD-12 | **Monorepo** | Single repo: `broadcast/`, `services/`, `web/`, `docker/`, `deploy/`, `tests/` |
-| KTD-8 | **`city_tag=all` → fan-out inject** | Same ad URI enqueued to every active city mount at AD priority (resolves flow gap Q1) |
+| KTD-8 | **`city_tag=all` → fan-out inject** | Same ad URI enqueued to every active city mount at AD priority (resolves flow gap FG1) |
 | KTD-9 | **Stinger+news = atomic pair** in Phase 2+ | Nothing inserts between stinger and news; Phase 1 has no news |
 | KTD-10 | **PostgreSQL deferred** to Phase 2+ | Phase 1 ads stored on filesystem; news persistence not needed yet |
 
@@ -224,7 +224,7 @@ FM21/
 **Test scenarios:**
 - Test expectation: none — documentation unit
 
-**Verification:** Contracts cover flow-analysis gaps Q1–Q7; reviewer can implement Liquidsoap from Broadcast Semantics alone
+**Verification:** Contracts cover flow-analysis gaps FG1–FG7; Liquidsoap queue semantics implementable from Broadcast Semantics (Redis consumption mechanism chosen in U4 per ADR-001 Appendix A)
 
 ---
 
@@ -340,7 +340,7 @@ FM21/
 
 **Approach:**
 - FastAPI app: `GET /api/geo/detect` (IP from request), `GET /api/geo/reverse?lat=&lon=`
-- MaxMind GeoLite2 City DB (path from `GEOIP_DB_PATH` env); map to `city_tag` via config table `config/cities.yaml`
+- MaxMind GeoLite2 City DB (path from `GEOIP_DB_PATH` env); reverse geocode lat/lon via server-side lookup (provider TBD in U6 spike); map to `city_tag` using `broadcast/liquidsoap/cities.yaml` as canonical city list
 - Return `{ city_tag, city_name, source: "geoip"|"reverse" }`
 
 **Test scenarios:**

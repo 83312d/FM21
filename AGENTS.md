@@ -37,17 +37,58 @@ Execute one implementation unit per agent session unless the user expands scope.
 
 ## Agent Runbook — per unit
 
-After the user assigns a unit (e.g. `/ce-work docs/plans/...` + unit id):
+**Critical:** `ce-work` does **not** auto-dispatch subagents or auto-invoke review skills. The orchestrator (this session) must **explicitly** call `Task` subagents and load `/ce-code-review` or `/ce-doc-review` before declaring a unit done. Listing steps below is mandatory, not optional.
+
+### Definition of done (every unit)
+
+A unit is **not complete** until all applicable items pass:
+
+- [ ] Implementation matches plan unit `Goal`, `Files`, `Verification`
+- [ ] Tests or doc verification (see table below)
+- [ ] Review skill invoked and findings addressed (no skip)
+- [ ] `ce-compound` if non-trivial learnings (R29)
+- [ ] User explicitly requested commit (if committing)
+
+### Execution steps
 
 ```
-1. ce-work     — implement only the requested unit; respect Scope Boundaries in the plan
-2. tests       — run via Docker (see Commands); never require host toolchains
-3. ce-code-review mode:autofix — fix findings in scope
-4. ce-compound — if non-trivial learnings, write docs/solutions/<topic>.md (R29)
-5. commit      — conventional message; user must request commit explicitly
+1. ce-work scope  — read plan unit only; create Task list with U-ID prefix
+2. implement      — inline OR subagents (see dispatch table)
+3. verify         — tests (Docker) or doc checklist
+4. review         — MANDATORY separate skill invocation (not inline self-review)
+5. ce-compound    — docs/solutions/ when warranted
+6. commit         — only when user asks
 ```
 
-Do not skip tests for units that define them. Documentation-only units (U1–U3) verify links and reviewer checklist instead.
+### Subagent dispatch (orchestrator chooses)
+
+| Unit type | Default strategy | When to parallelize |
+|-----------|------------------|---------------------|
+| **Docs** (U1–U3) | **Parallel:** 1 subagent per file group — ADRs (`docs/adr/`), contracts (`docs/contracts/`), spec (`spec/` + OpenAPI) | U2: dispatch 2 agents (ADRs batch + contracts batch) in parallel |
+| **Code** (U4+) | **Serial** unless plan `Files:` lists have zero intersection | U4 ∥ U6 after U2: separate worktrees (`ce-worktree`) |
+| **Trivial** (typo, one file) | Inline OK | Never |
+
+`ce-work` defaults to **inline** unless the prompt says `use subagents` or the table above applies. For FM21, **docs and code units use subagents by default.**
+
+### Review gate (MANDATORY — separate skill, not self-review)
+
+| Unit | Review skill | Arguments |
+|------|--------------|-----------|
+| U1–U3 (markdown) | `/ce-doc-review` | requirements: `docs/brainstorms/2026-06-08-fm21-requirements.md`, plan unit id |
+| U4+ (code) | `/ce-code-review` | `mode:autofix plan:docs/plans/2026-06-08-001-feat-fm21-greenfield-plan.md` |
+
+After review: fix P0/P1 in scope; document accepted residuals in session summary.
+
+### Doc units (U1–U3) verification without pytest
+
+- All internal markdown links resolve
+- Contracts answer plan flow gaps Q1–Q7 (U2 `Verification`)
+- ADR-001/002 consistent with `docs/brainstorms/...-requirements.md` Key Decisions
+- **Still run `/ce-doc-review`** — link check alone is not a substitute
+
+### Code units (U4+)
+
+Run tests via Docker (see Commands). Do not skip tests when the plan unit defines them.
 
 ## Commands
 
@@ -99,5 +140,6 @@ tests/         pytest + agent-browser e2e
 ## Current status
 
 - **U1 done:** Strategy, this file, README, `.env.example`, scaffolding ignores
+- **U2 done:** ADR-001/002, behavior contracts (`docs/contracts/`)
 - **ADR-003 done:** Container strategy (monorepo, images everywhere, Compose dev-only)
-- **Next:** U2 — ADR-001/002 + behavior contracts (`docs/contracts/`)
+- **Next:** U3 — acceptance spec (`spec/acceptance.yaml`) + OpenAPI
