@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FM21 — Интернет-радио</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="application/json" id="fm21-cities">
+      [{"tag":"moscow","name":"Москва"},{"tag":"spb","name":"Санкт-Петербург"}]
+    </script>
+  </head>
+  <body>
+    <main class="player" id="fm21-player">
+      <header class="player__header">
+        <div class="player__brand" aria-label="FM21">
+          <span class="player__logo">FM21</span>
+          <span class="player__tagline">Общий эфир — вы подключаетесь к прямому эфиру города</span>
+        </div>
+        <div class="player__city">
+          <label class="player__city-label" for="city-select">Город</label>
+          <select id="city-select" data-testid="city-select" aria-label="Выбор города"></select>
+        </div>
+      </header>
+
+      <section class="player__now" aria-live="polite">
+        <div class="player__live" id="live-indicator" data-testid="live-indicator" hidden>
+          <span class="player__live-dot" aria-hidden="true"></span>
+          <span>В эфире</span>
+        </div>
+        <p class="player__content-type" id="content-type" data-testid="content-type">—</p>
+        <h1 class="player__title" id="now-title" data-testid="now-title">Подключитесь к эфиру</h1>
+        <p class="player__artist" id="now-artist" data-testid="now-artist"></p>
+      </section>
+
+      <section class="player__controls">
+        <button
+          type="button"
+          id="play-btn"
+          class="player__play"
+          data-testid="play-btn"
+          aria-label="Воспроизвести"
+        >
+          ▶ Play
+        </button>
+        <p class="player__prompt" id="play-prompt" data-testid="play-prompt" hidden>
+          Нажмите Play
+        </p>
+        <label class="player__volume-label" for="volume">
+          Громкость
+          <input
+            type="range"
+            id="volume"
+            data-testid="volume"
+            min="0"
+            max="100"
+            value="80"
+          />
+        </label>
+      </section>
+
+      <p class="player__status" id="status" data-testid="status" role="status"></p>
+      <audio id="stream" data-testid="stream" preload="none" playsinline></audio>
+    </main>
+    <script src="/player.js" defer></script>
+  </body>
+</html>

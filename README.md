@@ -13,17 +13,22 @@ Optional: browser for player; ngrok/Cloudflare tunnel for Telegram webhook in de
 ## Quickstart
 
 1. Read [AGENTS.md](AGENTS.md) — agent onboarding and unit workflow.
-2. Copy `.env.example` to `.env` and fill secrets (human-only).
-3. After U4 lands:
+2. Copy `.env.example` to `.env` and fill secrets (human-only). Optional: set `ICECAST_SOURCE_PASSWORD` (default `fm21dev`, must match `broadcast/icecast/icecast.xml`).
+3. Start the dev broadcast stack:
    ```bash
-   docker compose up
+   docker compose build
+   docker compose up -d
    ```
-   Icecast mounts at `http://localhost:8000/moscow` and `/spb`; gateway (U7) at `http://localhost:8080`.
-
-4. Tests (after U5+):
+   Icecast mounts: `http://localhost:8000/moscow` and `http://localhost:8000/spb`. Smoke check:
    ```bash
-   docker compose run --rm test pytest tests/
-   docker compose run --rm e2e    # U7+
+   curl -I http://localhost:8000/moscow
+   ```
+   Gateway player (U7) will be at `http://localhost:8080`.
+
+4. Tests (pytest from U5+; e2e from U7):
+   ```bash
+   docker compose run --rm test
+   docker compose run --rm e2e
    ```
 
 `docker-compose.yml` is **development only**. Staging and production use the same images via `deploy/` (U11), not root Compose.

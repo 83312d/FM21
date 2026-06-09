@@ -120,7 +120,7 @@ Phase 1 injector accepts only `AD`. Static `MUSIC` filler is **Liquidsoap-local*
 ### Keys
 
 ```text
-fm21:queue:{cityTag}     List  — pending JSON items (LPUSH head, consume from tail or BRPOP policy per U4)
+fm21:queue:{cityTag}     List  — pending JSON items (LPUSH head, RPOP tail in Phase 1; see §9)
 fm21:current:{cityTag}   Hash  — now playing: type, title, artist, started_at, duration_sec
 ```
 
@@ -219,7 +219,27 @@ An implementer can build `broadcast/liquidsoap/fm21.liq` from this contract alon
 
 ### Consumption mechanism (U4)
 
-See [ADR-001 Appendix A](../adr/001-delivery-model.md#appendix-a--liquidsoap-consumption-mechanism). U4 selects poll vs harbor and documents poll interval such that empty-queue → filler handoff respects the **5 s dead-air cap** (§4). Exactly one consumer path per city — no concurrent poll and harbor on the same queue.
+**Chosen path (ADR-001 Appendix A):** Redis poll via `request.dynamic.list` in `broadcast/liquidsoap/fm21.liq` — not harbor push.
+
+| Parameter | Phase 1 value | Notes |
+|-----------|---------------|-------|
+| Source operator | `request.dynamic.list` per city | Callback runs at each block boundary |
+| Dequeue command | `RPOP fm21:queue:{cityTag}` | Invoked via `redis-cli` in container; LPUSH head + RPOP tail = FIFO |
+| Poll / retry delay | 1.0 s (`poll_retry_sec`) | Upper bound for re-poll after failure; empty queue still returns bed on same callback |
+| Filler | Rotate `data/music/static/bed-*.mp3` | When RPOP returns nothing; no Redis enqueue for Phase 1 bed |
+| Crossfade | 2 s | Between all blocks |
+| Dead-air cap | < 5 s (§4) | Empty Redis → bed URI returned immediately; `mksafe` guards decoder gaps |
+| Now playing | `HMSET fm21:current:{cityTag}` | On block start: `type`, `title`, `artist`, `started_at`, `duration_sec` |
+
+**Phase 1 dequeue note:** Only `AD` items are enqueued to Redis. Blind tail `RPOP` satisfies FIFO and priority (single type). Phase 2+ mixed types require priority scan (`LRANGE` + selective `LREM`) per §4 — replace `dequeue_queue_item` in `fm21.liq`.
+
+**Invariants:**
+
+- Exactly one consumer path per city — no concurrent poll and harbor on the same queue.
+- Current block plays to end before the next dequeue (no-interrupt, §3).
+- Harbor push remains a deferred alternative; do not run sidecar push alongside poll.
+
+**Reference implementation:** `broadcast/liquidsoap/fm21.liq`, `broadcast/liquidsoap/cities.yaml`, `broadcast/icecast/icecast.xml`.
 
 ---
 

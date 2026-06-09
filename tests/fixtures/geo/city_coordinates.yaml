@@ -1,0 +1,19 @@
+# Bundled WGS-84 coordinates for pytest reverse-geocode scenarios (U6).
+# Production reverse lookup uses the same centroids in services/geo/cities.py.
+moscow:
+  lat: 55.7558
+  lon: 37.6173
+  city_tag: moscow
+  city_name: Москва
+
+spb:
+  lat: 59.9343
+  lon: 30.3351
+  city_tag: spb
+  city_name: Санкт-Петербург
+
+# Midpoint between cities — still resolves to nearest broadcast city.
+between:
+  lat: 57.5
+  lon: 34.0
+  nearest: moscow

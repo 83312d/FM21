@@ -22,12 +22,12 @@
         <burst-size>65535</burst-size>
     </limits>
 
-  <!-- Dev default: fm21dev — override via ICECAST_SOURCE_PASSWORD at deploy -->
+  <!-- Dev default: fm21dev — substituted from ICECAST_SOURCE_PASSWORD at container start -->
     <authentication>
-        <source-password>fm21dev</source-password>
-        <relay-password>fm21dev</relay-password>
+        <source-password>${ICECAST_SOURCE_PASSWORD}</source-password>
+        <relay-password>${ICECAST_SOURCE_PASSWORD}</relay-password>
         <admin-user>admin</admin-user>
-        <admin-password>fm21dev</admin-password>
+        <admin-password>${ICECAST_SOURCE_PASSWORD}</admin-password>
     </authentication>
 
     <hostname>localhost</hostname>
@@ -40,6 +40,11 @@
     <!-- Dev: admin password set but change-admin disabled; do not expose :8000/admin in prod -->
     <security>
         <change-admin>0</change-admin>
+        <chroot>0</chroot>
+        <changeowner>
+            <user>icecast</user>
+            <group>icecast</group>
+        </changeowner>
     </security>
 
     <paths>
@@ -57,6 +62,7 @@
         <logsize>10000</logsize>
     </logging>
 
+    <!-- Mount names must match tag values in broadcast/liquidsoap/cities.yaml -->
     <mount type="normal">
         <mount-name>/moscow</mount-name>
         <public>1</public>
