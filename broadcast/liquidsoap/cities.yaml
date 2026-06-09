@@ -1,3 +1,6 @@
+# Canonical active-city list (Broadcast Semantics §2, Listener Contract §3).
+# Human-maintained. Each tag maps to Icecast mount /{tag} and Redis fm21:queue:{tag}.
+# Geo service and OpenAPI CityTag enum read this file — do not duplicate city lists.
 cities:
   - tag: moscow
     name: Moscow

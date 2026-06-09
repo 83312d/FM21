@@ -1,0 +1,201 @@
+# FM21 development stack only (ADR-003). Staging/production use deploy/ (U11).
+name: fm21
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  icecast:
+    build:
+      context: .
+      dockerfile: docker/icecast.Dockerfile
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-fm21dev}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./broadcast/icecast/icecast.xml:/etc/icecast2/icecast.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/status-json.xsl > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  liquidsoap:
+    build:
+      context: .
+      dockerfile: docker/liquidsoap.Dockerfile
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-fm21dev}
+    volumes:
+      - ./broadcast:/broadcast:ro
+      - ./data:/data:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      icecast:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf --max-time 3 -o /dev/null -w '%{http_code}' http://icecast:8000/moscow | grep -q 200",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  injector:
+    build:
+      context: .
+      dockerfile: docker/injector.Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+    volumes:
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  geo:
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: base
+    command: ["uvicorn", "services.geo.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8081:8080"
+    environment:
+      DEFAULT_CITY_TAG: ${DEFAULT_CITY_TAG:-moscow}
+      GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/data/GeoLite2-City.mmdb}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1}
+    volumes:
+      - ./broadcast:/broadcast:ro
+      - ./data:/data:ro
+    restart: unless-stopped
+
+  metadata:
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: base
+    command: ["uvicorn", "services.metadata.main:app", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      DEFAULT_CITY_TAG: ${DEFAULT_CITY_TAG:-moscow}
+    volumes:
+      - ./broadcast:/broadcast:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+      args:
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    ports:
+      - "8080:80"
+    depends_on:
+      geo:
+        condition: service_started
+      metadata:
+        condition: service_started
+      bot:
+        condition: service_started
+      icecast:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot.Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-fm21dev-webhook}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      INJECTOR_URL: http://injector:8080
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      ADS_DIR: /data/ads
+      DEFAULT_OPERATOR_CITY: ${DEFAULT_OPERATOR_CITY:-moscow}
+      MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
+    volumes:
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+      - ./data:/data
+    depends_on:
+      injector:
+        condition: service_started
+    restart: unless-stopped
+
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: test
+    volumes:
+      - .:/app
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      ICECAST_HOST: icecast
+      ICECAST_PORT: "8000"
+      CITIES_YAML_PATH: /app/broadcast/liquidsoap/cities.yaml
+      DEFAULT_CITY_TAG: moscow
+      GEOIP_DB_PATH: /nonexistent/GeoLite2-City.mmdb
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: e2e
+    volumes:
+      - .:/app
+      - e2e_node_modules:/app/node_modules
+    environment:
+      FM21_GATEWAY_URL: http://gateway
+      AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium
+    depends_on:
+      gateway:
+        condition: service_healthy
+      liquidsoap:
+        condition: service_healthy
+      metadata:
+        condition: service_started
+
+volumes:
+  e2e_node_modules:

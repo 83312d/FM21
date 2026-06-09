@@ -1,5 +1,5 @@
 {
   "$schema": "https://agent-browser.dev/schema.json",
-  "executablePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "ignoreHttpsErrors": true
+  "ignoreHttpsErrors": true,
+  "headed": false
 }
