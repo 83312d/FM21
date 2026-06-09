@@ -1,0 +1,85 @@
+<!--
+  FM21 Icecast 2 — development configuration (U4).
+
+  Source password: set ICECAST_SOURCE_PASSWORD in the environment and run
+  envsubst on this file at container start, or use the documented dev default
+  below (must match broadcast/liquidsoap/fm21.liq).
+
+  Admin UI: bound to localhost only for dev; change-admin disabled.
+-->
+<icecast>
+    <location>FM21 Dev</location>
+    <admin>admin@localhost</admin>
+
+    <limits>
+        <clients>256</clients>
+        <sources>8</sources>
+        <queue-size>524288</queue-size>
+        <client-timeout>30</client-timeout>
+        <header-timeout>15</header-timeout>
+        <source-timeout>10</source-timeout>
+        <burst-on-connect>1</burst-on-connect>
+        <burst-size>65535</burst-size>
+    </limits>
+
+  <!-- Dev default: fm21dev — override via ICECAST_SOURCE_PASSWORD at deploy -->
+    <authentication>
+        <source-password>fm21dev</source-password>
+        <relay-password>fm21dev</relay-password>
+        <admin-user>admin</admin-user>
+        <admin-password>fm21dev</admin-password>
+    </authentication>
+
+    <hostname>localhost</hostname>
+
+    <listen-socket>
+        <port>8000</port>
+        <bind-address>0.0.0.0</bind-address>
+    </listen-socket>
+
+    <!-- Dev: admin password set but change-admin disabled; do not expose :8000/admin in prod -->
+    <security>
+        <change-admin>0</change-admin>
+    </security>
+
+    <paths>
+        <basedir>/usr/share/icecast2</basedir>
+        <logdir>/var/log/icecast2</logdir>
+        <webroot>/usr/share/icecast2/web</webroot>
+        <adminroot>/usr/share/icecast2/admin</adminroot>
+        <alias source="/" destination="/status.xsl"/>
+    </paths>
+
+    <logging>
+        <accesslog>access.log</accesslog>
+        <errorlog>error.log</errorlog>
+        <loglevel>3</loglevel>
+        <logsize>10000</logsize>
+    </logging>
+
+    <mount type="normal">
+        <mount-name>/moscow</mount-name>
+        <public>1</public>
+        <stream-name>FM21 Moscow</stream-name>
+        <stream-description>FM21 city stream — Moscow</stream-description>
+        <stream-url>http://localhost:8000/moscow</stream-url>
+        <genre>Radio</genre>
+        <bitrate>128</bitrate>
+        <type>audio/mpeg</type>
+        <subtype>mp3</subtype>
+        <burst-size>65536</burst-size>
+    </mount>
+
+    <mount type="normal">
+        <mount-name>/spb</mount-name>
+        <public>1</public>
+        <stream-name>FM21 Saint Petersburg</stream-name>
+        <stream-description>FM21 city stream — Saint Petersburg</stream-description>
+        <stream-url>http://localhost:8000/spb</stream-url>
+        <genre>Radio</genre>
+        <bitrate>128</bitrate>
+        <type>audio/mpeg</type>
+        <subtype>mp3</subtype>
+        <burst-size>65536</burst-size>
+    </mount>
+</icecast>
