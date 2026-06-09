@@ -1,0 +1,5 @@
+cities:
+  - tag: moscow
+    name: Moscow
+  - tag: spb
+    name: Saint Petersburg
