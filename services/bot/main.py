@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 
 from services.bot.handlers.city import ad_city_callback, city_command
+from services.bot.handlers.order import order_callback, order_command
 from services.bot.handlers.voice import voice_message
 
 logger = logging.getLogger(__name__)
@@ -47,11 +48,12 @@ def build_application() -> Application:
     )
 
     application.add_handler(CommandHandler("city", city_command))
-    application.add_handler(CommandHandler("order", coming_soon))
+    application.add_handler(CommandHandler("order", order_command))
     application.add_handler(CommandHandler("status", coming_soon))
     application.add_handler(CommandHandler("playlist", coming_soon))
     application.add_handler(MessageHandler(filters.VOICE, voice_message))
     application.add_handler(CallbackQueryHandler(ad_city_callback, pattern=r"^ad:"))
+    application.add_handler(CallbackQueryHandler(order_callback, pattern=r"^order:"))
 
     return application
 

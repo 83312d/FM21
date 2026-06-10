@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from services.injector.fanout import PHASE1_TYPES, load_active_cities, prepare_enqueue
+from services.injector.fanout import ENQUEUE_TYPES, load_active_cities, prepare_enqueue
 from services.injector.queue import QueueClient, QueueFullError
 
 MAX_PENDING_ADS = int(os.environ.get("MAX_PENDING_ADS_PER_CITY", "5"))
@@ -22,10 +22,11 @@ class EnqueueMeta(BaseModel):
     title: str
     artist: str = ""
     duration_sec: int = Field(ge=1)
+    track_id: str = ""
 
 
 class EnqueueRequest(BaseModel):
-    type: Literal["AD"]
+    type: Literal["AD", "MUSIC", "MUSIC_ORDER"]
     uri: str = Field(min_length=1)
     city_tag: str
     meta: EnqueueMeta
@@ -70,17 +71,17 @@ app = FastAPI(title="FM21 Injector", lifespan=lifespan)
 
 
 def _validate_request(body: EnqueueRequest, active_cities: list[str]) -> None:
-    if body.type not in PHASE1_TYPES:
+    if body.type not in ENQUEUE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown or unsupported type for Phase 1: {body.type}",
+            detail=f"Unknown or unsupported type: {body.type}",
         )
     if body.city_tag != "all" and body.city_tag not in active_cities:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid city_tag: {body.city_tag}",
         )
-    if body.meta.duration_sec > MAX_AD_DURATION_SEC:
+    if body.type == "AD" and body.meta.duration_sec > MAX_AD_DURATION_SEC:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"AD duration exceeds {MAX_AD_DURATION_SEC}s limit",
@@ -109,6 +110,8 @@ def enqueue(
         "artist": body.meta.artist,
         "duration_sec": body.meta.duration_sec,
     }
+    if body.meta.track_id:
+        meta["track_id"] = body.meta.track_id
     city_items = prepare_enqueue(
         item_type=body.type,
         uri=body.uri,
@@ -123,11 +126,18 @@ def enqueue(
         )
 
     try:
-        if len(city_items) == 1:
-            city, item = city_items[0]
-            queue.enqueue_ad(city, item)
+        if body.type == "AD":
+            if len(city_items) == 1:
+                city, item = city_items[0]
+                queue.enqueue_ad(city, item)
+            else:
+                queue.fanout_ad(city_items)
         else:
-            queue.fanout_ad(city_items)
+            for city, item in city_items:
+                queue.enqueue_item(city, item)
+                track_id = meta.get("track_id")
+                if track_id and body.type == "MUSIC_ORDER":
+                    queue.record_playlist_buffer(city, track_id)
     except QueueFullError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -70,6 +70,19 @@ Developers and admins change music **selection** via `playlist_rules.yaml` and `
 | 2 | Yandex via `MusicProvider` | Yandex playlists per rules | Bot `/order` |
 | Production | TBD licensed path | Licensed catalog | Licensed search |
 
+## Implementation appendix (U10)
+
+| Component | Location | Notes |
+|-----------|----------|-------|
+| `MusicProvider` ABC | `services/music/provider.py` | `search`, `get_playlist_tracks`, `resolve_stream_url` |
+| Factory | `get_music_provider()` / `create_music_provider()` | `MUSIC_PROVIDER=yandex\|static`; invalid/missing Yandex token → `StaticProvider` |
+| Yandex adapter | `services/music/yandex_provider.py` | OAuth via `YANDEX_MUSIC_OAUTH_TOKEN` only; never logged |
+| Static fallback | `services/music/static_provider.py` | Reads `STATIC_MUSIC_DIR` (`data/music/static/` in dev) |
+| Stream URL cache | `tracks_cache` table | Re-resolve when expiry is within 2 minutes |
+| Playlist ID format | `{uid}:{kind}` | Yandex user playlist reference for `get_playlist_tracks` |
+
+Buffer worker (U12) and playlist rules (U11) consume this interface; Liquidsoap never calls Yandex directly.
+
 ## Related
 
 - [ADR-001](001-delivery-model.md) — `MUSIC` and `MUSIC_ORDER` queue types

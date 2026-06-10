@@ -14,8 +14,10 @@ COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
 COPY services/bot/ /app/services/bot/
+COPY services/db/ /app/services/db/
 COPY services/geo/ /app/services/geo/
 COPY services/injector/ /app/services/injector/
+COPY services/music/ /app/services/music/
 COPY broadcast/liquidsoap/cities.yaml /broadcast/liquidsoap/cities.yaml
 
 ENV CITIES_YAML_PATH=/broadcast/liquidsoap/cities.yaml

@@ -1,0 +1,12 @@
+[
+  {
+    "codec": "mp3",
+    "bitrate_in_kbps": 192,
+    "direct_link": "https://cdn.example/yandex/track-1001.mp3?expires=1893456000"
+  },
+  {
+    "codec": "mp3",
+    "bitrate_in_kbps": 320,
+    "direct_link": "https://cdn.example/yandex/track-1001-hq.mp3?expires=1893456000"
+  }
+]

@@ -2,6 +2,36 @@
 name: fm21
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fm21}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fm21dev}
+      POSTGRES_DB: ${POSTGRES_DB:-fm21}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fm21} -d ${POSTGRES_DB:-fm21}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: docker/python.Dockerfile
+      target: base
+    command: ["python", "-m", "services.db.migrate"]
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   redis:
     image: redis:7-alpine
     ports:
@@ -134,6 +164,38 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  music-worker:
+    build:
+      context: .
+      dockerfile: docker/music-worker.Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      INJECTOR_URL: http://injector:8080
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      PLAYLIST_RULES_PATH: /app/services/music/playlist_rules.yaml
+      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
+      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
+      STATIC_MUSIC_DIR: /data/music/static
+      MUSIC_BUFFER_TARGET: ${MUSIC_BUFFER_TARGET:-10}
+      MUSIC_BUFFER_POLL_INTERVAL_SEC: ${MUSIC_BUFFER_POLL_INTERVAL_SEC:-15}
+    volumes:
+      - ./services:/app/services:ro
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+      - ./data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      injector:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   bot:
     build:
       context: .
@@ -150,12 +212,19 @@ services:
       ADS_DIR: /data/ads
       DEFAULT_OPERATOR_CITY: ${DEFAULT_OPERATOR_CITY:-moscow}
       MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
+      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
+      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
     volumes:
       - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
       - ./data:/data
     depends_on:
       injector:
         condition: service_started
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   test:
@@ -168,12 +237,15 @@ services:
       - .:/app
     environment:
       REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
       ICECAST_HOST: icecast
       ICECAST_PORT: "8000"
       CITIES_YAML_PATH: /app/broadcast/liquidsoap/cities.yaml
       DEFAULT_CITY_TAG: moscow
       GEOIP_DB_PATH: /nonexistent/GeoLite2-City.mmdb
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 

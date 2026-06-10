@@ -1,0 +1,25 @@
+{
+  "tracks": {
+    "total": 3,
+    "results": [
+      {
+        "id": "1001",
+        "title": "Bohemian Rhapsody",
+        "duration_ms": 354000,
+        "artists": [{"name": "Queen"}]
+      },
+      {
+        "id": "1002",
+        "title": "Under Pressure",
+        "duration_ms": 248000,
+        "artists": [{"name": "Queen"}, {"name": "David Bowie"}]
+      },
+      {
+        "id": "1003",
+        "title": "Radio Ga Ga",
+        "duration_ms": 348000,
+        "artists": [{"name": "Queen"}]
+      }
+    ]
+  }
+}
