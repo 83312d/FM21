@@ -10,6 +10,8 @@ from typing import Any
 import yaml
 
 PHASE1_TYPES = frozenset({"AD"})
+PHASE2_TYPES = frozenset({"MUSIC", "MUSIC_ORDER"})
+ENQUEUE_TYPES = PHASE1_TYPES | PHASE2_TYPES
 TYPE_PRIORITIES = {
     "AD": 100,
     "NEWS_PAIR": 80,

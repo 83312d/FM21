@@ -1,0 +1,23 @@
+{
+  "kind": 3,
+  "uid": 12345,
+  "title": "Daily Mix",
+  "tracks": [
+    {
+      "track": {
+        "id": "2001",
+        "title": "Track One",
+        "duration_ms": 180000,
+        "artists": [{"name": "Artist A"}]
+      }
+    },
+    {
+      "track": {
+        "id": "2002",
+        "title": "Track Two",
+        "duration_ms": 210000,
+        "artists": [{"name": "Artist B"}]
+      }
+    }
+  ]
+}

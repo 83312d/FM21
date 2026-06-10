@@ -8,6 +8,7 @@ from typing import Any
 import redis
 
 QUEUE_KEY_PREFIX = "fm21:queue:"
+PLAYLIST_BUFFER_KEY_PREFIX = "fm21:playlist:buffer:"
 
 # Atomic: count pending AD items (not LLEN), reject if at capacity, else LPUSH.
 # Returns [1, new_count] on success, [0, 'QUEUE_FULL'] on capacity violation.
@@ -74,6 +75,27 @@ class QueueClient:
         items = self._redis.lrange(self.queue_key(city_tag), 0, -1)
         return sum(1 for raw in items if _item_type(raw) == "AD")
 
+    def count_pending_music(self, city_tag: str) -> int:
+        items = self._redis.lrange(self.queue_key(city_tag), 0, -1)
+        return sum(1 for raw in items if _item_type(raw) == "MUSIC")
+
+    def playlist_buffer_key(self, city_tag: str) -> str:
+        return f"{PLAYLIST_BUFFER_KEY_PREFIX}{city_tag}"
+
+    def list_playlist_buffer(self, city_tag: str) -> list[str]:
+        return self._redis.lrange(self.playlist_buffer_key(city_tag), 0, -1)
+
+    def record_playlist_buffer(self, city_tag: str, track_id: str, *, max_len: int = 100) -> None:
+        key = self.playlist_buffer_key(city_tag)
+        pipe = self._redis.pipeline()
+        pipe.lpush(key, track_id)
+        pipe.ltrim(key, 0, max_len - 1)
+        pipe.execute()
+
+    def enqueue_item(self, city_tag: str, item: dict[str, Any]) -> None:
+        payload = json.dumps(item, separators=(",", ":"))
+        self._redis.lpush(self.queue_key(city_tag), payload)
+
     def enqueue_ad(self, city_tag: str, item: dict[str, Any]) -> None:
         payload = json.dumps(item, separators=(",", ":"))
         result = self._enqueue_ad(keys=[self.queue_key(city_tag)], args=[self._max_pending_ads, payload])
@@ -99,6 +121,7 @@ class QueueClient:
         pipe = self._redis.pipeline()
         for city in city_tags:
             pipe.delete(self.queue_key(city))
+            pipe.delete(self.playlist_buffer_key(city))
         pipe.execute()
 
 

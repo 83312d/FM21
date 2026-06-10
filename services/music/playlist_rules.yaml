@@ -1,0 +1,17 @@
+# FM21 playlist policy (R24, R31). Sole developer-editable music selection surface.
+# Per-city overrides below; admin /playlist writes playlist_config in PostgreSQL.
+version: 1
+
+default:
+  yandex_playlist_ids:
+    - "1904216019:1001"
+  max_track_duration_sec: 420
+  blocklisted_artists: []
+
+cities:
+  moscow:
+    yandex_playlist_ids:
+      - "1904216019:1001"
+  spb:
+    yandex_playlist_ids:
+      - "1904216019:1001"
