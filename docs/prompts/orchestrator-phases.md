@@ -164,7 +164,7 @@ Do NOT start U15 (news). Do NOT commit unless user asks.
 **Human gates before U16:**
 - ADR-004 approved (news sourcing)
 - ADR-006 (TTS), ADR-009 (LLM) — or explicit assumptions documented
-- `OPENAI_API_KEY`, `NEUROZVUK_API_KEY` in `.env`
+- `GIGACHAT_CREDENTIALS` (and optional `GIGACHAT_SCOPE`), `NEUROZVUK_API_KEY` in `.env`
 - Human approves `services/news/sources.yaml` feed list
 
 ```text
@@ -525,11 +525,11 @@ URL dedup UNIQUE source_url; normalize utm params.
 ### Worker U17
 
 ```text
-WORKER U17 — OpenAI summarizer RU 150–250 words.
+WORKER U17 — GigaChat summarizer RU 150–250 words.
 
 Read plan 002 § U17, ADR-009 if present.
 
-services/news/summarizer/*, tests/test_news_summarizer.py (mocked OpenAI).
+services/news/summarizer/* (gigachat_client.py), tests/test_news_summarizer.py (mocked GigaChat).
 
 [CONSTRAINTS block]
 ```

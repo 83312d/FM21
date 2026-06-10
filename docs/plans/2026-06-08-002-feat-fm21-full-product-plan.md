@@ -45,7 +45,7 @@ From `docs/brainstorms/2026-06-08-fm21-full-product-requirements.md`:
 | KTD-F2 | **Python 3.12** glue services | TZ Node layout superseded; Telegram/ffmpeg ecosystem |
 | KTD-F3 | **PostgreSQL 16** all TZ §8.1 tables | Single DB introduced in U9 before music/news |
 | KTD-F4 | **Priority dequeue** via LRANGE+LREM script | Mixed-type Redis list; not blind RPOP at scale |
-| KTD-F5 | **News: RSS registry + OpenAI + Neurozvuk** | TZ §3.1; search API optional fallback |
+| KTD-F5 | **News: RSS registry + GigaChat + Neurozvuk** | TZ §3.1; search API optional fallback |
 | KTD-F6 | **Ads service** separate from bot | Transcode + DB + enqueue; bot stays thin |
 | KTD-F7 | **`playlist_rules.yaml`** policy seam | R24; replaces `playlist-rules.js` |
 | KTD-F8 | **Production in `deploy/`** | ADR-003; root Compose dev-only |
@@ -381,7 +381,7 @@ flowchart TB
 
 ---
 
-### U17. Summarizer (OpenAI)
+### U17. Summarizer (GigaChat)
 
 **Goal:** RU 150–250 word radio copy from source text.
 
@@ -390,11 +390,12 @@ flowchart TB
 **Dependencies:** U15, U16
 
 **Files:**
-- `services/news/summarizer/prompt.py`, `openai_client.py`, `validate.py`
+- `services/news/summarizer/prompt.py`, `gigachat_client.py`, `validate.py`
 - `services/news/workers/summarize.py`
 - `tests/test_news_summarizer.py`
 
 **Approach:**
+- LLM: **GigaChat** via official `gigachat` Python SDK (`GIGACHAT_CREDENTIALS`, optional `GIGACHAT_SCOPE`).
 - Prompt: IT tone, no bullet lists, word count enforced with retry.
 - Idempotent on already-summarized rows.
 
@@ -402,7 +403,7 @@ flowchart TB
 - Mock 180 words → accepted.
 - Out of range → retry once.
 
-**Verification:** pytest; spot-check 3 Russian summaries.
+**Verification:** pytest (mocked GigaChat); spot-check 3 Russian summaries.
 
 ---
 
@@ -866,7 +867,7 @@ flowchart TB
 | ADR-006 | TTS provider (Neurozvuk) | U18 |
 | ADR-007 | News play-count semantics | U19 |
 | ADR-008 | News audio storage dev/prod | U18 |
-| ADR-009 | LLM summarization policy | U17 |
+| ADR-009 | LLM summarization policy (GigaChat) | U17 |
 | ADR-010 | News slot timezone & slip | U21 |
 
 ---
