@@ -37,7 +37,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 
 **Yandex Music via personal OAuth — closed beta.** Unofficial API acceptable for friends-only beta (ADR-002). `MusicProvider` abstraction; static/royalty-free fallback on failure.
 
-**News pipeline.** RSS registry (human-maintained `sources.yaml`) + optional search API fallback; OpenAI summarizer → 150–250 word RU; Neurozvuk TTS (`lang=ru`); pre-generation 2 minutes before slot; play_count ≤ 3 / 24h without re-TTS.
+**News pipeline.** RSS registry (human-maintained `sources.yaml`) + optional search API fallback; GigaChat summarizer → 150–250 word RU; Neurozvuk TTS (`lang=ru`); pre-generation 2 minutes before slot; play_count ≤ 3 / 24h without re-TTS.
 
 **Docker images everywhere; Compose dev-only.** Same images for CI/staging/production (ADR-003). Production manifests in `deploy/`, not root Compose.
 
@@ -108,7 +108,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 - R30. Public: `GET /api/geo/detect`, `GET /api/geo/reverse`, `GET /api/now-playing/{cityTag}`, `GET /api/queue/{cityTag}`, `GET /api/health`.
 - R31. Stream: ICY via Icecast `/{cityTag}` (not HLS/WS from TZ §7.1).
 - R32. Internal: `POST /api/bot/webhook`, `POST /internal/enqueue`, ads submit API.
-- R33. Server-side only: Yandex, TTS, Telegram, news fetcher, OpenAI summarizer.
+- R33. Server-side only: Yandex, TTS, Telegram, news fetcher, GigaChat summarizer.
 
 ### Data & Cron (TZ §8, §9)
 
@@ -208,7 +208,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 
 - Telegram bot token and HTTPS webhook URL available for production
 - Yandex Music personal token for closed beta
-- OpenAI API for summarization; Neurozvuk (or equivalent) for TTS
+- GigaChat API (`GIGACHAT_CREDENTIALS`, optional `GIGACHAT_SCOPE`) for summarization; Neurozvuk (or equivalent) for TTS
 - MaxMind GeoLite2 or equivalent for GeoIP
 - S3 or local filesystem for news MP3 storage (prod vs dev)
 - Human approves: ADR-004+ news sourcing, production `sources.yaml`, secrets, production city list
