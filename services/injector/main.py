@@ -23,10 +23,11 @@ class EnqueueMeta(BaseModel):
     artist: str = ""
     duration_sec: int = Field(ge=1)
     track_id: str = ""
+    stinger_uri: str = ""
 
 
 class EnqueueRequest(BaseModel):
-    type: Literal["AD", "MUSIC", "MUSIC_ORDER"]
+    type: Literal["AD", "MUSIC", "MUSIC_ORDER", "NEWS_PAIR"]
     uri: str = Field(min_length=1)
     city_tag: str
     meta: EnqueueMeta
@@ -112,6 +113,8 @@ def enqueue(
     }
     if body.meta.track_id:
         meta["track_id"] = body.meta.track_id
+    if body.meta.stinger_uri:
+        meta["stinger_uri"] = body.meta.stinger_uri
     city_items = prepare_enqueue(
         item_type=body.type,
         uri=body.uri,

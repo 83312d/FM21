@@ -1,9 +1,10 @@
-"""Injector service tests — AE1, AE-QUEUE-FULL, AE-ALL-FANOUT (U5)."""
+"""Injector service tests — AE1, AE2, AE-QUEUE-FULL, AE-ALL-FANOUT (U5, U22)."""
 
 from __future__ import annotations
 
 import concurrent.futures
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,20 @@ from fastapi.testclient import TestClient
 from services.injector.fanout import build_queue_item
 from services.injector.queue import QueueClient
 
+DEQUEUE_LUA = (Path(__file__).resolve().parents[1] / "broadcast/liquidsoap/dequeue.lua").read_text()
+CITY = "moscow"
+
 pytestmark = pytest.mark.usefixtures("queue_client")
+
+
+def _run_dequeue(queue_client: QueueClient) -> list[str]:
+    key = queue_client.queue_key(CITY)
+    result = queue_client._redis.eval(DEQUEUE_LUA, 1, key)
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return [str(line) for line in result]
+    return [str(result)]
 
 
 def _enqueue(
@@ -129,6 +143,46 @@ def test_wrong_token_returns_401(injector_client, ad_payload):
     headers = {"X-FM21-Internal-Token": "wrong"}
     response = injector_client.post("/internal/enqueue", json=ad_payload, headers=headers)
     assert response.status_code == 401
+
+
+def test_ae2_injector_accepts_ad_during_simulated_news_pair_playback(
+    injector_client,
+    auth_headers,
+    ad_payload,
+    queue_client,
+) -> None:
+    """AE2: voice ad enqueued mid-NEWS_PAIR block waits in queue at AD priority."""
+    news = build_queue_item(
+        item_type="NEWS_PAIR",
+        uri="file:///data/news/segment.mp3",
+        city_tag=CITY,
+        meta={
+            "title": "IT headline",
+            "artist": "",
+            "duration_sec": 90,
+            "stinger_uri": "file:///data/news/news-stinger.mp3",
+        },
+    )
+    queue_client.enqueue_item(CITY, news)
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 2
+    assert queue_client.list_items(CITY) == []
+
+    body = _enqueue(injector_client, auth_headers, ad_payload)
+    assert body["city_tags"] == [CITY]
+
+    pending = queue_client.list_items(CITY)
+    assert len(pending) == 1
+    assert pending[0]["type"] == "AD"
+    assert pending[0]["priority"] == 100
+    assert pending[0]["uri"] == ad_payload["uri"]
+
+    next_lines = _run_dequeue(queue_client)
+    assert len(next_lines) == 1
+    uri, type_, *_rest = (next_lines[0] + "\t\t\t\t\t").split("\t")[:2]
+    assert type_ == "AD"
+    assert uri == ad_payload["uri"]
 
 
 def test_concurrent_enqueue_respects_capacity(injector_client, auth_headers, ad_payload, queue_client):

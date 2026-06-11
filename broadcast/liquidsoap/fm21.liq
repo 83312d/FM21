@@ -151,6 +151,39 @@ def tag_metadata(city_tag, m) =
   end
 end
 
+# NEWS_PAIR stinger→main is one block (FG6): no crossfade between parts.
+# request.dynamic.list batches all lines from one dequeue.sh call before the
+# next poll — AE2 no-interrupt holds for the full pair.
+def default_block_crossfade(a, b) =
+  add(
+    normalize=false,
+    [
+      fade.in(duration=crossfade_sec, type="sin", b.source),
+      fade.out(duration=crossfade_sec, type="sin", a.source)
+    ]
+  )
+end
+
+def block_transition(a, b) =
+  a_type = a.metadata["fm21_type"] ?? ""
+  b_type = b.metadata["fm21_type"] ?? ""
+  a_part = a.metadata["fm21_part"] ?? ""
+  b_part = b.metadata["fm21_part"] ?? ""
+  if
+    a_type == "NEWS_PAIR"
+  and
+    b_type == "NEWS_PAIR"
+  and
+    a_part == "stinger"
+  and
+    b_part == "main"
+  then
+    sequence([a.source, b.source])
+  else
+    default_block_crossfade(a, b)
+  end
+end
+
 def make_city_stream(city_tag) =
   dynamic =
     request.dynamic.list(
@@ -163,7 +196,7 @@ def make_city_stream(city_tag) =
       dynamic,
       fun (m) -> tag_metadata(city_tag, m)
     )
-  mksafe(crossfade(duration=crossfade_sec, tagged))
+  mksafe(cross(duration=crossfade_sec, block_transition, tagged))
 end
 
 def mount_city(city_tag) =

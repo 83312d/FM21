@@ -164,6 +164,98 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  news-fetch:
+    build:
+      context: .
+      dockerfile: docker/news.Dockerfile
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      NEWS_SOURCES_PATH: /app/services/news/sources.yaml
+      NEWS_FETCH_INTERVAL_SEC: "600"
+    volumes:
+      - ./services:/app/services:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-materialize:
+    build:
+      context: .
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.materialize_cron"]
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      REDIS_URL: redis://redis:6379/0
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      SALUTESPEECH_CREDENTIALS: ${SALUTESPEECH_CREDENTIALS:-}
+      SALUTESPEECH_SCOPE: ${SALUTESPEECH_SCOPE:-SALUTE_SPEECH_PERS}
+      SALUTESPEECH_VOICE: ${SALUTESPEECH_VOICE:-Nec_24000}
+      SALUTESPEECH_VERIFY_SSL_CERTS: ${SALUTESPEECH_VERIFY_SSL_CERTS:-true}
+    volumes:
+      - ./services:/app/services:ro
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-enqueue:
+    build:
+      context: .
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.enqueue_cron"]
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      REDIS_URL: redis://redis:6379/0
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      INJECTOR_URL: http://injector:8080
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      NEWS_AUDIO_DIR: /data/news
+    volumes:
+      - ./services:/app/services:ro
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      injector:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-play-count-reset:
+    build:
+      context: .
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.play_count_reset"]
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./services:/app/services:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   music-worker:
     build:
       context: .

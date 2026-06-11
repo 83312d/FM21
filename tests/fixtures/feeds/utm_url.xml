@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>FM21 UTM Feed</title>
+    <link>https://example.com/</link>
+    <description>Article links with tracking params</description>
+    <item>
+      <title>Tracked article</title>
+      <link>https://example.com/news/tracked?utm_source=rss&amp;utm_medium=feed</link>
+      <description>Tracked link variant of an article whose canonical URL should normalize to the same source_url as a later feed entry without utm parameters for deduplication testing. Padding keeps this RSS body above five hundred characters so ingest tests remain offline and do not attempt to download article HTML from example.com during duplicate URL normalization checks. Extra filler about analytics parameters and canonical links extends this fixture description for hermetic CI and stable content hashing in Docker.</description>
+    </item>
+    <item>
+      <title>Canonical article</title>
+      <link>https://example.com/news/tracked</link>
+      <description>Canonical link without tracking parameters. After URL normalization the ingest worker should treat this as the same article as the tracked variant and skip creating a second row. Extra filler text keeps the RSS summary above five hundred characters for hermetic unit tests that validate utm stripping without live network calls. Additional neutral padding about feeds, syndication, and deduplication semantics keeps this snippet above the article-fetch threshold in offline pytest runs.</description>
+    </item>
+  </channel>
+</rss>
