@@ -1,0 +1,16 @@
+# Human-maintained RSS registry for IT news ingest (U16, R18).
+# Per-source: enabled, weight (selection priority), url.
+# Production list requires human approval (ADR-004).
+version: 1
+
+sources:
+  - id: habr
+    name: Habr — все статьи
+    url: https://habr.com/ru/rss/articles/?fl=ru
+    enabled: true
+    weight: 1
+  - id: 3dnews
+    name: 3DNews — новости
+    url: https://3dnews.ru/news/rss/
+    enabled: true
+    weight: 1
