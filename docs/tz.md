@@ -70,7 +70,7 @@ FM21 — автономный сервис интернет-радио с неп
 |--------|------------|
 | Источник | Свободный поиск по мировым IT-новостным ресурсам (любой язык): Hacker News, TechCrunch, The Verge, Ars Technica, Habr и др. |
 | Обработка текста | Сокращение до сути → авторский текст на русском (150–250 слов, ≈1–2 мин озвучки при 130 слов/мин) |
-| Озвучка | API с русским языком и корректными ударениями (Нейрозвук.онлайн или аналог), `lang=ru` |
+| Озвучка | SaluteSpeech (Sber) — синтез речи с русскими голосами, SSML для ударений/пауз |
 | Расписание | Cron `*/15 * * * *` — вставка слота NEWS в очередь каждого города |
 | Кэш и повторы | Одна новость — не более 3 раз в сутки. Кэшировать текст и аудио, не переозвучивать при повторе |
 | Перебивка | Перед новостью: `news-stinger.mp3` (3–5 сек) «Сейчас новости» |
@@ -258,7 +258,7 @@ fm21:playlist:buffer:{cityTag} — List track IDs
 ```
 NODE_ENV, PORT, DATABASE_URL, REDIS_URL, S3_BUCKET
 YANDEX_MUSIC_TOKEN
-NEUROZVUK_API_KEY, NEUROZVUK_API_URL
+SALUTESPEECH_CREDENTIALS, SALUTESPEECH_SCOPE, SALUTESPEECH_VOICE (optional)
 TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_URL, TELEGRAM_ADMIN_IDS
 NEWS_API_KEY, GIGACHAT_CREDENTIALS, GIGACHAT_SCOPE (optional — summarizer)
 GEOIP_DB_PATH, DEFAULT_CITY_TAG, HLS_SEGMENT_DURATION_SEC

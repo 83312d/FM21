@@ -37,7 +37,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 
 **Yandex Music via personal OAuth — closed beta.** Unofficial API acceptable for friends-only beta (ADR-002). `MusicProvider` abstraction; static/royalty-free fallback on failure.
 
-**News pipeline.** RSS registry (human-maintained `sources.yaml`) + optional search API fallback; GigaChat summarizer → 150–250 word RU; Neurozvuk TTS (`lang=ru`); pre-generation 2 minutes before slot; play_count ≤ 3 / 24h without re-TTS.
+**News pipeline.** RSS registry (human-maintained `sources.yaml`) + optional search API fallback; GigaChat summarizer → 150–250 word RU; SaluteSpeech TTS (Russian voices, SSML); pre-generation 2 minutes before slot; play_count ≤ 3 / 24h without re-TTS.
 
 **Docker images everywhere; Compose dev-only.** Same images for CI/staging/production (ADR-003). Production manifests in `deploy/`, not root Compose.
 
@@ -86,7 +86,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 
 - R18. IT news from global sources (HN, TechCrunch, Verge, Ars, Habr, etc.) via RSS + optional search.
 - R19. Summarize to original Russian 150–250 words (~1–2 min @ 130 wpm).
-- R20. TTS via Neurozvuk or equivalent with Russian stress; cache text + MP3.
+- R20. TTS via SaluteSpeech (Sber) with Russian voices/SSML; cache text + MP3.
 - R21. Cron `*/15 * * * *` enqueue NEWS_PAIR to all active cities.
 - R22. Pre-generate audio ≥ 2 minutes before slot (TZ §13 risk mitigation).
 
@@ -108,7 +108,7 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 - R30. Public: `GET /api/geo/detect`, `GET /api/geo/reverse`, `GET /api/now-playing/{cityTag}`, `GET /api/queue/{cityTag}`, `GET /api/health`.
 - R31. Stream: ICY via Icecast `/{cityTag}` (not HLS/WS from TZ §7.1).
 - R32. Internal: `POST /api/bot/webhook`, `POST /internal/enqueue`, ads submit API.
-- R33. Server-side only: Yandex, TTS, Telegram, news fetcher, GigaChat summarizer.
+- R33. Server-side only: Yandex, SaluteSpeech TTS, Telegram, news fetcher, GigaChat summarizer.
 
 ### Data & Cron (TZ §8, §9)
 
@@ -208,7 +208,8 @@ Technical choices already validated in-repo (ADR-001/002/003, behavior contracts
 
 - Telegram bot token and HTTPS webhook URL available for production
 - Yandex Music personal token for closed beta
-- GigaChat API (`GIGACHAT_CREDENTIALS`, optional `GIGACHAT_SCOPE`) for summarization; Neurozvuk (or equivalent) for TTS
+- GigaChat API (`GIGACHAT_CREDENTIALS`, optional `GIGACHAT_SCOPE`) for summarization
+- SaluteSpeech API (`SALUTESPEECH_CREDENTIALS`, `SALUTESPEECH_SCOPE`; optional `SALUTESPEECH_VOICE`) for TTS — [docs](https://developers.sber.ru/docs/ru/salutespeech/overview)
 - MaxMind GeoLite2 or equivalent for GeoIP
 - S3 or local filesystem for news MP3 storage (prod vs dev)
 - Human approves: ADR-004+ news sourcing, production `sources.yaml`, secrets, production city list

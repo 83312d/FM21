@@ -45,7 +45,7 @@ From `docs/brainstorms/2026-06-08-fm21-full-product-requirements.md`:
 | KTD-F2 | **Python 3.12** glue services | TZ Node layout superseded; Telegram/ffmpeg ecosystem |
 | KTD-F3 | **PostgreSQL 16** all TZ §8.1 tables | Single DB introduced in U9 before music/news |
 | KTD-F4 | **Priority dequeue** via LRANGE+LREM script | Mixed-type Redis list; not blind RPOP at scale |
-| KTD-F5 | **News: RSS registry + GigaChat + Neurozvuk** | TZ §3.1; search API optional fallback |
+| KTD-F5 | **News: RSS registry + GigaChat + SaluteSpeech** | TZ §3.1; search API optional fallback |
 | KTD-F6 | **Ads service** separate from bot | Transcode + DB + enqueue; bot stays thin |
 | KTD-F7 | **`playlist_rules.yaml`** policy seam | R24; replaces `playlist-rules.js` |
 | KTD-F8 | **Production in `deploy/`** | ADR-003; root Compose dev-only |
@@ -409,29 +409,34 @@ flowchart TB
 
 ### U18. TTS & audio storage
 
-**Goal:** Neurozvuk MP3 + stinger asset + duration probe.
+**Goal:** SaluteSpeech MP3 + stinger asset + duration probe.
 
 **Requirements:** R20
 
 **Dependencies:** U17
 
 **Files:**
-- `services/news/tts/neurozvuk.py`
+- `services/news/tts/salutespeech.py`, `services/news/tts/auth.py`
 - `services/news/storage/local.py`, `storage/s3.py`
 - `services/news/audio_probe.py`
 - `data/news/news-stinger.mp3`
 - `tests/test_news_tts.py`
 
 **Approach:**
+- TTS: **SaluteSpeech** REST sync synthesis ([docs](https://developers.sber.ru/docs/ru/salutespeech/overview)).
+- Auth: `POST https://ngw.devices.sberbank.ru:9443/api/v2/oauth` with `SALUTESPEECH_CREDENTIALS` (Base64 Client ID:Secret) and `SALUTESPEECH_SCOPE` (`SALUTE_SPEECH_PERS` | `SALUTE_SPEECH_CORP`); Bearer token TTL 30 min — cache/refresh in client.
+- Synthesis: `POST https://smartspeech.sber.ru/rest/v1/text:synthesize?format=wav16&voice={SALUTESPEECH_VOICE}` (default `Nec_24000`); body UTF-8 text or SSML for stress/pauses; sync limit ~4k chars (sufficient for 150–250 words).
+- Transcode `wav16` → MP3 via ffmpeg before storage.
 - TTS cache key `fm21:tts:cache:{sha256(summary_ru)}` in Redis.
 - Output `file:///data/news/{id}.mp3` (dev) or S3 (prod — ADR-008).
 - ffprobe duration; stinger 3–5s committed asset.
+- SSL: Russian CA bundle may be required in containers (ADR-006).
 
 **Test scenarios:**
 - Mock TTS → file + `audio_url` + duration.
 - Repeat text → no second TTS call.
 
-**Verification:** pytest; stinger duration in [3,5]s.
+**Verification:** pytest (mocked SaluteSpeech); stinger duration in [3,5]s.
 
 ---
 
@@ -839,7 +844,8 @@ flowchart TB
 | Risk | Mitigation |
 |------|------------|
 | Yandex API breakage | MusicProvider + static fallback (U10, U12) |
-| TTS latency at slot | Materialize T−2 min (U20) |
+| TTS latency at slot | Materialize T−2 min (U20); SaluteSpeech sync API + token refresh |
+| SaluteSpeech SSL / CA in Docker | ADR-006; mount Russian CA or `SALUTESPEECH_VERIFY_SSL_CERTS` |
 | Liquidsoap priority dequeue bugs | `test_dequeue_priority.py` (U13) |
 | Music licensing public launch | ADR-002; closed beta scope |
 | Telegram webhook TLS | U30 staging first |
@@ -864,7 +870,7 @@ flowchart TB
 |-----|-------|-------------|
 | ADR-004 | News sourcing & attribution | U16 |
 | ADR-005 | PostgreSQL adoption (if not folded into U9 notes) | U9 |
-| ADR-006 | TTS provider (Neurozvuk) | U18 |
+| ADR-006 | TTS provider (SaluteSpeech) | U18 |
 | ADR-007 | News play-count semantics | U19 |
 | ADR-008 | News audio storage dev/prod | U18 |
 | ADR-009 | LLM summarization policy (GigaChat) | U17 |

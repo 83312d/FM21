@@ -164,7 +164,7 @@ Do NOT start U15 (news). Do NOT commit unless user asks.
 **Human gates before U16:**
 - ADR-004 approved (news sourcing)
 - ADR-006 (TTS), ADR-009 (LLM) — or explicit assumptions documented
-- `GIGACHAT_CREDENTIALS` (and optional `GIGACHAT_SCOPE`), `NEUROZVUK_API_KEY` in `.env`
+- `GIGACHAT_CREDENTIALS` (optional `GIGACHAT_SCOPE`), `SALUTESPEECH_CREDENTIALS` + `SALUTESPEECH_SCOPE` in `.env`
 - Human approves `services/news/sources.yaml` feed list
 
 ```text
@@ -537,13 +537,13 @@ services/news/summarizer/* (gigachat_client.py), tests/test_news_summarizer.py (
 ### Worker U18
 
 ```text
-WORKER U18 — Neurozvuk TTS + storage + stinger.
+WORKER U18 — SaluteSpeech TTS + storage + stinger.
 
-Read plan 002 § U18, ADR-006/008.
+Read plan 002 § U18, ADR-006/008. SaluteSpeech docs: https://developers.sber.ru/docs/ru/salutespeech/overview
 
-services/news/tts/*, storage/*, data/news/news-stinger.mp3, tests/test_news_tts.py.
+services/news/tts/salutespeech.py, auth.py; storage/*; data/news/news-stinger.mp3; tests/test_news_tts.py (mocked SaluteSpeech).
 
-Redis TTS cache by summary hash. ffprobe duration.
+OAuth token (30 min) + REST text:synthesize wav16 → ffmpeg MP3. Redis TTS cache by summary hash. ffprobe duration.
 
 [CONSTRAINTS block]
 ```

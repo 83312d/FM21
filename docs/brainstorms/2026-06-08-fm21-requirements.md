@@ -195,7 +195,7 @@ The highest-risk gaps are: (1) geotargeting is the headline rule but was sequenc
 
 - Operators have Telegram accounts and the bot is added to their workflow.
 - A Yandex Music account with OAuth token is available for closed-beta streaming; operators understand this is not licensed for public commercial radio.
-- TTS provider with Russian language support is available for news phase (Neurozvuk or equivalent).
+- SaluteSpeech (Sber) TTS with Russian voices is available for news phase (Phase 3).
 - GeoIP database (MaxMind GeoLite2 or equivalent) available for IP fallback.
 - Hosting runs FM21 as Docker containers (ADR-003); Liquidsoap + Icecast are never installed directly on the host.
 - Compound-engineering plugin remains enabled in Cursor for agent-assisted development.
@@ -215,7 +215,7 @@ _All resolved._
 
 - Exact glue-service language (Go vs Python) for news/bot/geo APIs
 - Hosting topology (single VM vs containers per city)
-- TTS provider selection and cost model at 15-minute cadence × N cities
+- SaluteSpeech cost model at 15-minute cadence × N cities (provider chosen: SaluteSpeech)
 - Icecast vs HLS as primary listener protocol (ICY recommended for sync radio low latency; planning decides)
 
 ---
