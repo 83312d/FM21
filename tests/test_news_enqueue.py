@@ -22,6 +22,7 @@ from services.news.enqueue import (
     NewsEnqueueResult,
     build_news_pair_payload,
     estimate_slip_sec,
+    resolve_duration_sec,
     should_skip_for_slip,
 )
 from services.news.pipeline import pin_slot_item
@@ -109,6 +110,42 @@ async def _ready_item(
     await repo.mark_ready(item.id)
     await db_session.commit()
     return item.id
+
+
+@pytest.mark.asyncio
+async def test_build_news_pair_payload_uses_ceiled_probe_duration(
+    repo: NewsItemRepository,
+    db_session: AsyncSession,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mp3_path = tmp_path / "fractional.mp3"
+    mp3_path.write_bytes(b"\x00")
+
+    item = await repo.create_from_fetch(
+        NewsFetchInput(
+            source_url="https://example.com/ceil-duration",
+            content_hash="ceil-duration-hash",
+        )
+    )
+    await db_session.commit()
+    await repo.update_summary(item.id, "Новость с дробной длительностью.")
+    await repo.update_audio(item.id, f"file://{mp3_path}")
+    await repo.mark_ready(item.id)
+    await db_session.commit()
+
+    reloaded = await repo.get_by_id(item.id)
+    assert reloaded is not None
+
+    monkeypatch.setattr(
+        "services.news.enqueue.probe_duration_sec",
+        lambda path: 88.4,
+    )
+
+    assert resolve_duration_sec(reloaded.audio_url) == 89
+
+    payload = build_news_pair_payload(reloaded)
+    assert payload["meta"]["duration_sec"] == 89
 
 
 @pytest.mark.asyncio

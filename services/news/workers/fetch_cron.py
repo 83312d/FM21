@@ -14,6 +14,7 @@ from services.db.session import async_session_factory
 from services.news.db.repository import NewsItemRepository
 from services.news.fetcher.dedup import IngestResult, ingest_article
 from services.news.fetcher.rss import DEFAULT_TIMEOUT_SEC, fetch_feed, resolve_entry_body
+from services.news.http import http_verify_ssl
 from services.news.sources_loader import NewsSource, SourcesRegistry, load_sources
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,9 @@ class NewsFetchWorker:
     async def run_once(self, *, feed_bodies: dict[str, str] | None = None) -> FetchStats:
         self._stats = FetchStats()
         timeout = httpx.Timeout(self.timeout_sec)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True, verify=http_verify_ssl()
+        ) as client:
             for source in self.registry.enabled_sources:
                 try:
                     await self.process_source(

@@ -28,6 +28,30 @@
 | 4 | `feat/phase-4-bot-ops` | U24–U29 | |
 | 5 | `feat/phase-5-production` | U30–U34 | secrets + staging |
 
+### Phase Exit Gates (A–E) — обязательны для оркестратора
+
+Перед закрытием фазы (merge / демо) прогони все применимые гейты и сведи таблицу pass/fail. Не закрывай фазу при pytest green, если liquidsoap падает или gateway отдаёт 502.
+
+| Gate | Команда | Когда |
+|------|---------|-------|
+| **A** | `docker compose run --rm test pytest tests/ -q` | Каждый code unit; exit фазы |
+| **B** | `docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq` | Юниты с `broadcast/liquidsoap/`; exit фазы |
+| **C** | `curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/moscow` и `/spb` → `200` | gateway/nginx/player; нужен `docker compose up` |
+| **D** | `docker compose run --rm e2e` | player/geo; exit фазы (кроме Phase 0) |
+| **E** | `bash scripts/verify_acceptance.sh --phase N` (`--allow-manual` если есть manual AE) | Exit фазы; `spec/acceptance.yaml` |
+
+Полный exit-набор (пример Phase 3):
+
+```bash
+docker compose run --rm test pytest tests/ -q
+docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq
+curl -sf -o /dev/null -w "%{http_code}\n" http://localhost:8080/moscow http://localhost:8080/spb
+docker compose run --rm e2e
+bash scripts/verify_acceptance.sh --phase 3 --allow-manual
+```
+
+См. также [AGENTS.md](../../AGENTS.md) § Layer gates.
+
 ---
 
 ## Общие правила оркестратора (во все фазы)
@@ -37,15 +61,26 @@
 ```text
 ROLE: Orchestrator only. Do NOT implement units inline except one-line fixes after review.
 
-MANDATORY per unit (Definition of done):
+MANDATORY per unit (Definition of done — RED → GREEN → VERIFY → LAYER → REVIEW):
 1. Read plan unit (Goal, Files, Approach, Test scenarios, Verification) — plan 002; U4–U8 detail in plan 001.
-2. Dispatch Task subagent with matching Worker prompt from docs/prompts/orchestrator-phases.md §Workers.
-3. Verify via Docker (pytest / e2e / curl) per unit Verification — no host pip/npm.
-4. Invoke /ce-code-review mode:autofix plan:docs/plans/2026-06-08-002-feat-fm21-full-product-plan.md — separate skill, not self-review.
-5. Fix P0/P1 in scope; /ce-compound → docs/solutions/ if non-trivial learnings.
-6. Do NOT commit unless user explicitly asks.
-7. Do NOT modify AGENTS.md or agent workflow docs unless user asks.
-8. Do NOT LPUSH production Redis or mutate live queue state (R30).
+2. Dispatch Task subagent with Worker prompt + TDD block (§Workers template) — worker must RED before GREEN when plan lists Test scenarios.
+3. VERIFY: Docker per unit Verification — no host pip/npm.
+4. LAYER: run applicable Phase Exit Gates A–E for touched layers (not pytest-only if liq/gateway/player changed).
+5. Invoke /ce-code-review mode:autofix plan:docs/plans/2026-06-08-002-feat-fm21-full-product-plan.md — separate skill, not self-review.
+6. Fix P0/P1 in scope; /ce-compound → docs/solutions/ if non-trivial learnings.
+7. Do NOT commit unless user explicitly asks.
+8. Do NOT modify AGENTS.md or agent workflow docs unless user asks.
+9. Do NOT LPUSH production Redis or mutate live queue state (R30).
+
+TDD mandatory (workers + orchestrator verify):
+- Plan unit with Test scenarios → worker writes/extends failing pytest (or e2e) FIRST, reports RED command + output.
+- Orchestrator rejects unit if implementation landed without RED evidence.
+- Bugfix → regression test RED before fix.
+- Doc-only units (U1–U3): checklist gap = RED; link check = VERIFY.
+
+Phase exit (orchestrator mandatory before merge/demo):
+- Run full applicable gate set A–E (see table above); report pass/fail table.
+- Phase NOT complete if gateway /moscow or /spb ≠ 200 or liquidsoap --check fails.
 
 Subagent rules:
 - Code units: prefer Task subagents; parallelize only when plan Files: have zero intersection.
@@ -292,6 +327,15 @@ Do NOT commit unless user asks. Do NOT force-push main.
 Шаблон worker (общий хвост для всех):
 
 ```text
+TDD (mandatory for code units with Test scenarios in plan):
+1. RED   — add or extend failing test(s) per plan Test scenarios; run in Docker; paste failing output.
+2. GREEN — implement ONLY this unit until tests pass; minimal diff.
+3. VERIFY — run plan unit Verification command(s) in Docker.
+4. LAYER — if you touched broadcast/liquidsoap → liquidsoap --check; gateway/player → curl :8080/moscow /spb; e2e if player — document commands + results.
+5. Return RED output, GREEN output, VERIFY/LAYER commands, files changed, blockers.
+
+If plan has no Test scenarios (pure config/doc): document expected failure or checklist gap as RED.
+
 CONSTRAINTS:
 - Implement ONLY this unit. Do not start next unit.
 - Read: docs/contracts/, relevant ADR, plan unit section in 002 (U4–U8 detail in 001).

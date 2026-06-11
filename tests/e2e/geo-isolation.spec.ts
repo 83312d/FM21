@@ -6,7 +6,8 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
-const GATEWAY_URL = process.env.FM21_GATEWAY_URL ?? "http://gateway";
+const GATEWAY_URL =
+  process.env.GATEWAY_URL ?? process.env.FM21_GATEWAY_URL ?? "http://gateway";
 const SESSION = "fm21-e2e";
 
 function ab(...args: string[]): string {
@@ -30,8 +31,12 @@ function evalJs<T>(script: string): T {
     },
   ).trim();
   try {
-    const parsed = JSON.parse(output) as { result?: T; value?: T };
-    return (parsed.result ?? parsed.value ?? parsed) as T;
+    const parsed = JSON.parse(output) as {
+      data?: { result?: T };
+      result?: T;
+      value?: T;
+    };
+    return (parsed.data?.result ?? parsed.result ?? parsed.value ?? parsed) as T;
   } catch {
     return output as T;
   }
@@ -61,7 +66,7 @@ describe("FM21 web player", () => {
     ab("wait", "[data-testid='play-btn']");
 
     const snapshot = ab("snapshot", "-i", "-s", "#fm21-player");
-    expect(snapshot).toMatch(/Play/i);
+    expect(snapshot).toMatch(/Play|Воспроизвести/i);
     expect(snapshot).not.toMatch(/modal/i);
 
     const cityValue = evalJs<string>(
@@ -81,6 +86,12 @@ describe("FM21 web player", () => {
 
     const src = evalJs<string>("document.querySelector('[data-testid=\"stream\"]')?.src");
     expect(src).toContain("/moscow");
+
+    const status = evalJs<string>(
+      "(() => { const el = document.querySelector('[data-testid=\"status\"]'); return el ? (el.textContent || '').trim() : ''; })()",
+    );
+    expect(status).not.toMatch(/Повтор подключения/);
+    expect(status).toBe("");
   });
 
   it("AE-CITY-SWITCH — reconnect to spb within 2s", () => {

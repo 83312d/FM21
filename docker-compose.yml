@@ -172,8 +172,10 @@ services:
       DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
       NEWS_SOURCES_PATH: /app/services/news/sources.yaml
       NEWS_FETCH_INTERVAL_SEC: "600"
+      FM21_CERTS_DIR: /certs
     volumes:
       - ./services:/app/services:ro
+      - ./certs:/certs:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -196,10 +198,12 @@ services:
       SALUTESPEECH_SCOPE: ${SALUTESPEECH_SCOPE:-SALUTE_SPEECH_PERS}
       SALUTESPEECH_VOICE: ${SALUTESPEECH_VOICE:-Nec_24000}
       SALUTESPEECH_VERIFY_SSL_CERTS: ${SALUTESPEECH_VERIFY_SSL_CERTS:-true}
+      FM21_CERTS_DIR: /certs
     volumes:
       - ./services:/app/services:ro
       - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
       - ./data:/data
+      - ./certs:/certs:ro
     depends_on:
       postgres:
         condition: service_healthy

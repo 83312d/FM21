@@ -10,7 +10,10 @@ icecast_password = environment.get("ICECAST_SOURCE_PASSWORD") ?? "fm21dev"
 cities_yaml = "/broadcast/liquidsoap/cities.yaml"
 dequeue_script = "/broadcast/liquidsoap/dequeue.sh"
 music_glob = "/data/music/static/bed-*.mp3"
-crossfade_sec = 2.0
+music_crossfade_sec = 2.0
+news_enter_fade_out_sec = 1.5
+news_stinger_fade_in_sec = 0.35
+news_exit_fade_in_sec = 2.5
 poll_retry_sec = 1.0
 http_probe_timeout_sec = 4.0
 
@@ -94,9 +97,17 @@ def annotated_request(row) =
   duration = row.duration
   part = row.part
   uri = row.uri
-  request.create(
-    "annotate:fm21_type=\"#{type_}\",title=\"#{title}\",artist=\"#{artist}\",duration=\"#{duration}\",fm21_part=\"#{part}\":#{uri}"
-  )
+  # NEWS_PAIR main: omit duration — Liquidsoap cross uses annotate duration as
+  # track length; a rounded enqueue value truncates speech before decoder EOF.
+  if type_ == "NEWS_PAIR" and part == "main" then
+    request.create(
+      "annotate:fm21_type=\"#{type_}\",title=\"#{title}\",artist=\"#{artist}\",fm21_part=\"#{part}\":#{uri}"
+    )
+  else
+    request.create(
+      "annotate:fm21_type=\"#{type_}\",title=\"#{title}\",artist=\"#{artist}\",duration=\"#{duration}\",fm21_part=\"#{part}\":#{uri}"
+    )
+  end
 end
 
 def row_to_request(row) =
@@ -154,12 +165,34 @@ end
 # NEWS_PAIR stinger→main is one block (FG6): no crossfade between parts.
 # request.dynamic.list batches all lines from one dequeue.sh call before the
 # next poll — AE2 no-interrupt holds for the full pair.
-def default_block_crossfade(a, b) =
+#
+# Music↔music: log crossfade (less harsh than sin on full-band tracks).
+# Music→news: fade music out, then stinger — no overlap (speech must be clean).
+# News→music: news to full end, then fade music in — avoids cutting last words.
+def music_block_crossfade(a, b) =
   add(
     normalize=false,
     [
-      fade.in(duration=crossfade_sec, type="sin", b.source),
-      fade.out(duration=crossfade_sec, type="sin", a.source)
+      fade.in(duration=music_crossfade_sec, type="log", b.source),
+      fade.out(duration=music_crossfade_sec, type="log", a.source)
+    ]
+  )
+end
+
+def enter_news_transition(a, b) =
+  sequence(
+    [
+      fade.out(duration=news_enter_fade_out_sec, type="log", a.source),
+      fade.in(duration=news_stinger_fade_in_sec, type="log", b.source)
+    ]
+  )
+end
+
+def exit_news_transition(a, b) =
+  sequence(
+    [
+      fade.out(duration=0., type="log", a.source),
+      fade.in(duration=news_exit_fade_in_sec, type="log", b.source)
     ]
   )
 end
@@ -178,9 +211,18 @@ def block_transition(a, b) =
   and
     b_part == "main"
   then
-    sequence([a.source, b.source])
+    sequence(
+      [
+        fade.out(duration=0., type="log", a.source),
+        fade.in(duration=0., type="log", b.source)
+      ]
+    )
+  elsif b_type == "NEWS_PAIR" and b_part == "stinger" then
+    enter_news_transition(a, b)
+  elsif a_type == "NEWS_PAIR" and a_part == "main" then
+    exit_news_transition(a, b)
   else
-    default_block_crossfade(a, b)
+    music_block_crossfade(a, b)
   end
 end
 
@@ -196,7 +238,7 @@ def make_city_stream(city_tag) =
       dynamic,
       fun (m) -> tag_metadata(city_tag, m)
     )
-  mksafe(cross(duration=crossfade_sec, block_transition, tagged))
+  mksafe(cross(duration=music_crossfade_sec, block_transition, tagged))
 end
 
 def mount_city(city_tag) =

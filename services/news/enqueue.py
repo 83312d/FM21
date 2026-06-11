@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -50,7 +51,7 @@ def resolve_duration_sec(audio_url: str, *, default: int = DEFAULT_NEWS_DURATION
     if audio_url.startswith("file://"):
         path = Path(audio_url.removeprefix("file://"))
         try:
-            return max(1, int(round(probe_duration_sec(path))))
+            return max(1, math.ceil(probe_duration_sec(path)))
         except AudioProbeError:
             pass
     return default

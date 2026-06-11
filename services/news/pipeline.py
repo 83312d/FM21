@@ -63,13 +63,10 @@ async def select_for_materialize(
 ) -> NewsItem | None:
     """Pick an item to pin for the upcoming slot.
 
-    Prefer rotation-eligible ``ready`` items (U19). Otherwise take the oldest
-    ``fetched`` or ``summarized`` row for pre-generation.
+    Advance the pipeline first: oldest ``fetched`` or ``summarized`` row gets
+    summary/TTS so new stories rotate on air. Fall back to rotation-eligible
+    ``ready`` items only when nothing is queued for materialization.
     """
-    ready = await select_news_item(repo, session, redis_client)
-    if ready is not None:
-        return ready
-
     result = await session.execute(
         select(NewsItem)
         .where(NewsItem.status == NewsItemStatus.FETCHED)
@@ -86,7 +83,11 @@ async def select_for_materialize(
         .order_by(NewsItem.id)
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    summarized = result.scalar_one_or_none()
+    if summarized is not None:
+        return summarized
+
+    return await select_news_item(repo, session, redis_client)
 
 
 async def materialize_news_item(

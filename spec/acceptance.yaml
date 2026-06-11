@@ -35,7 +35,10 @@ acceptance:
       - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
     verification:
       - pytest: tests/test_injector.py (moscow enqueue absent from spb list)
-      - e2e: tests/e2e/geo-isolation.spec.ts (dual-browser tab isolation)
+      - pytest: tests/test_broadcast_gates.py (nginx static mount proxy paths)
+      - e2e: tests/e2e/stream-playback.spec.ts (gateway play moscow+spb — CI gate)
+      - e2e: tests/e2e/geo-isolation.spec.ts (dual-browser tab isolation; AE6 manual/nightly)
+      - script: scripts/verify_acceptance.sh --phase 1 (gate C — gateway GET /moscow /spb)
       - manual: two browser tabs on /moscow and /spb mounts after Telegram voice ad
       - redis-check: LLEN/scan fm21:queue:moscow vs fm21:queue:spb after enqueue
     units: [U5, U7, U8]
@@ -63,6 +66,8 @@ acceptance:
     verification:
       - pytest: tests/test_injector.py::test_ae2_injector_accepts_ad_during_simulated_news_pair_playback
       - pytest: tests/test_dequeue_priority.py (AE2 queue-order scenarios)
+      - pytest: tests/test_broadcast_gates.py (fm21.liq NEWS_PAIR annotate contract)
+      - script: scripts/verify_acceptance.sh --phase 3 (gate B — liquidsoap --check)
       - integration: log tail of Liquidsoap + redis queue order during news playback
       - manual: submit voice ad during live news block; confirm no audio cut
     units: [U15, U16, U17, U18, U19, U20, U21, U22, U23]
@@ -121,6 +126,8 @@ acceptance:
     verification:
       - e2e: tests/e2e/geo-isolation.spec.ts (denied geolocation scenario)
       - pytest: tests/test_geo.py (Moscow IP fallback response shape)
+      - pytest: tests/test_broadcast_gates.py (gateway nginx mount contract)
+      - script: scripts/verify_acceptance.sh --phase 1 (gate C — gateway GET /moscow /spb)
       - manual: deny geolocation in browser; confirm badge and Play without modal
     units: [U6, U7]
 
@@ -284,5 +291,7 @@ acceptance:
       - docs/openapi.yaml#/paths/~1api~1now-playing~1{cityTag}
     verification:
       - e2e: tests/e2e/geo-isolation.spec.ts (city switch timing assertion)
+      - pytest: tests/test_broadcast_gates.py (nginx static mount locations)
+      - script: scripts/verify_acceptance.sh --phase 1 (gate C — gateway GET /moscow /spb)
       - manual: switch moscow → spb during playback; measure reconnect < 2s
     units: [U7]

@@ -9,6 +9,8 @@ from typing import Any
 
 import httpx
 
+from services.news.ssl import salutespeech_verify
+
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 TOKEN_ENV = "SALUTESPEECH_CREDENTIALS"
 SCOPE_ENV = "SALUTESPEECH_SCOPE"
@@ -22,9 +24,27 @@ class SaluteSpeechAuthError(RuntimeError):
     """Raised when OAuth token exchange fails."""
 
 
-def verify_ssl_from_env() -> bool:
-    raw = os.environ.get(VERIFY_SSL_ENV, "true").strip().lower()
-    return raw not in {"0", "false", "no", "off"}
+def verify_ssl_from_env() -> bool | str:
+    """Backward-compatible alias — returns CA bundle path or verify flag."""
+    return salutespeech_verify()
+
+
+def _token_ttl_sec(payload: dict[str, Any]) -> int:
+    """Derive cache TTL from SaluteSpeech OAuth response (expires_at, not expires_in)."""
+    expires_at = payload.get("expires_at")
+    if isinstance(expires_at, (int, float)):
+        ts = float(expires_at)
+        if ts > 1_000_000_000_000:
+            ts /= 1000.0
+        remaining = ts - time.time()
+        if remaining > 120:
+            return min(int(remaining) - 60, _TOKEN_CACHE_SEC)
+
+    expires_in = payload.get("expires_in")
+    if isinstance(expires_in, (int, float)) and expires_in > 60:
+        return min(int(expires_in) - 60, _TOKEN_CACHE_SEC)
+
+    return _TOKEN_CACHE_SEC
 
 
 class SaluteSpeechAuth:
@@ -56,6 +76,7 @@ class SaluteSpeechAuth:
             "Authorization": f"Basic {self._credentials}",
             "RqUID": str(uuid.uuid4()),
             "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
         }
         data = {"scope": self._scope}
 
@@ -66,7 +87,11 @@ class SaluteSpeechAuth:
                 data=data,
             )
         else:
-            async with httpx.AsyncClient(verify=self._verify_ssl, timeout=30.0) as client:
+            async with httpx.AsyncClient(
+                verify=self._verify_ssl,
+                timeout=30.0,
+                trust_env=False,
+            ) as client:
                 response = await client.post(
                     OAUTH_URL,
                     headers=headers,
@@ -75,7 +100,8 @@ class SaluteSpeechAuth:
 
         if response.status_code != 200:
             raise SaluteSpeechAuthError(
-                f"SaluteSpeech OAuth failed with status {response.status_code}"
+                f"SaluteSpeech OAuth failed with status {response.status_code}: "
+                f"{response.text[:300]}"
             )
 
         payload: dict[str, Any] = response.json()
@@ -83,11 +109,7 @@ class SaluteSpeechAuth:
         if not token:
             raise SaluteSpeechAuthError("SaluteSpeech OAuth response missing access_token")
 
-        expires_in = payload.get("expires_in")
-        if isinstance(expires_in, (int, float)) and expires_in > 60:
-            ttl = min(int(expires_in) - 60, _TOKEN_CACHE_SEC)
-        else:
-            ttl = _TOKEN_CACHE_SEC
+        ttl = _token_ttl_sec(payload)
 
         self._token = str(token)
         self._expires_at = time.monotonic() + ttl

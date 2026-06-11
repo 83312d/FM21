@@ -341,7 +341,7 @@ async def test_materialize_worker_pins_all_cities(
 
 
 @pytest.mark.asyncio
-async def test_select_for_materialize_prefers_ready_over_fetched(
+async def test_materialize_advances_fetched_pipeline(
     repo: NewsItemRepository,
     db_session: AsyncSession,
     redis_client: redis.Redis,
@@ -360,5 +360,5 @@ async def test_select_for_materialize_prefers_ready_over_fetched(
 
     selected = await select_for_materialize(repo, db_session, redis_client)
     assert selected is not None
-    assert selected.id == ready.id
-    assert selected.id != fetched.id
+    assert selected.status == NewsItemStatus.FETCHED
+    assert selected.id != ready.id

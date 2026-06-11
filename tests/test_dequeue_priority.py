@@ -141,8 +141,10 @@ def test_news_pair_before_music_order(queue_client: QueueClient) -> None:
     assert stinger["type"] == "NEWS_PAIR"
     assert stinger["part"] == "stinger"
     assert stinger["uri"] == news["meta"]["stinger_uri"]
+    assert stinger["duration"] == "4"
     assert main["part"] == "main"
     assert main["uri"] == news["uri"]
+    assert main["duration"] == "90"
 
 
 def test_fifo_within_same_priority(queue_client: QueueClient) -> None:

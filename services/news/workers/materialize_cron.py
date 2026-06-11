@@ -15,6 +15,7 @@ import redis
 from services.db.session import async_session_factory
 from services.injector.fanout import load_active_cities
 from services.news.db.repository import NewsItemRepository
+from services.news.http import http_verify_ssl
 from services.news.pipeline import (
     MaterializeResult,
     MaterializeStats,
@@ -71,7 +72,9 @@ class NewsMaterializeWorker:
         self._stats = MaterializeStats(cities=len(self.cities))
 
         timeout = httpx.Timeout(self.timeout_sec)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http_client:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True, verify=http_verify_ssl()
+        ) as http_client:
             for city in self.cities:
                 async with self.session_factory()() as session:
                     repo = NewsItemRepository(session)

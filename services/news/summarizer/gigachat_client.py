@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from gigachat import GigaChat
 
 from services.news.summarizer.prompt import build_chat
+from services.news.ssl import gigachat_ssl_kwargs
 
 DEFAULT_SCOPE = "GIGACHAT_API_PERS"
 
@@ -43,10 +44,7 @@ def create_summarizer_client() -> GigaChatSummarizer:
     kwargs: dict[str, object] = {
         "credentials": credentials,
         "scope": os.environ.get("GIGACHAT_SCOPE", DEFAULT_SCOPE),
+        **gigachat_ssl_kwargs(),
     }
-
-    verify_ssl = os.environ.get("GIGACHAT_VERIFY_SSL_CERTS")
-    if verify_ssl is not None:
-        kwargs["verify_ssl_certs"] = verify_ssl.lower() in ("1", "true", "yes")
 
     return GigaChatSummarizer(**kwargs)

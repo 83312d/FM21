@@ -14,5 +14,8 @@ __pycache__/
 # Runtime-generated ads (voice transcodes)
 data/ads/*
 
+# Corporate trust anchors (local only — org policy; never commit)
+certs/ca-certificates-21/
+
 # Node (agent-browser e2e)
 node_modules/

@@ -1,0 +1,57 @@
+# FM21 CI — layer gates A, B, and broadcast contract tests (U-TDD-6).
+# All jobs use Docker Compose v2 per ADR-003; no secrets required.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run full test suite
+        run: docker compose run --rm test pytest tests/ -q
+
+  liquidsoap-check:
+    name: liquidsoap-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liquidsoap compile check
+        run: docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq
+
+  broadcast-gates:
+    name: broadcast-gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Broadcast contract gates
+        run: docker compose run --rm test pytest tests/test_broadcast_gates.py -v
+
+  # E2E (gate D) is manual / phase-exit only — not run on every push/PR.
+  # Full stack startup (postgres, redis, icecast, liquidsoap, gateway, metadata)
+  # plus browser playback is too slow for PR feedback. Run locally:
+  #   docker compose up -d --wait
+  #   docker compose run --rm e2e
+  # Or enable as a nightly/scheduled workflow if runtime becomes acceptable.
+  #
+  # e2e:
+  #   name: e2e
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Start dev stack
+  #       run: docker compose up -d --wait
+  #     - name: E2E stream playback
+  #       run: docker compose run --rm e2e
+  #     - name: Tear down
+  #       if: always()
+  #       run: docker compose down -v

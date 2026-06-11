@@ -22,6 +22,7 @@ local function item_priority(item)
 end
 
 local FIELD_SEP = string.char(9)
+local STINGER_DURATION_SEC = 4
 
 local function escape_field(value)
   if value == nil then
@@ -35,6 +36,9 @@ local function format_line(uri, item, part)
   local title = escape_field(meta.title or "")
   local artist = escape_field(meta.artist or "")
   local duration = escape_field(meta.duration_sec or 0)
+  if part == "stinger" then
+    duration = escape_field(meta.stinger_duration_sec or STINGER_DURATION_SEC)
+  end
   local type_ = escape_field(item.type or "MUSIC")
   return escape_field(uri)
     .. FIELD_SEP

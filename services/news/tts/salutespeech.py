@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -109,7 +110,8 @@ class SaluteSpeechTTS:
         params = {"format": "wav16", "voice": self._voice}
         headers = {
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/text; charset=utf-8",
+            "Content-Type": "application/text",
+            "X-Request-ID": str(uuid.uuid4()),
         }
 
         if self._client is not None:
@@ -120,7 +122,11 @@ class SaluteSpeechTTS:
                 content=text.encode("utf-8"),
             )
         else:
-            async with httpx.AsyncClient(verify=self._verify_ssl, timeout=120.0) as client:
+            async with httpx.AsyncClient(
+                verify=self._verify_ssl,
+                timeout=120.0,
+                trust_env=False,
+            ) as client:
                 response = await client.post(
                     SYNTHESIZE_URL,
                     params=params,
@@ -129,8 +135,11 @@ class SaluteSpeechTTS:
                 )
 
         if response.status_code != 200:
+            request_id = response.headers.get("X-Request-ID", "")
+            detail = response.text[:300] if response.text else response.content[:200]
             raise SaluteSpeechError(
                 f"SaluteSpeech synthesis failed with status {response.status_code}"
+                f"{f' (X-Request-ID={request_id})' if request_id else ''}: {detail!r}"
             )
 
         if not response.content:

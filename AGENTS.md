@@ -62,22 +62,55 @@ New sessions do **not** see prior chats. Subagents only return a summary to the 
 
 A unit is **not complete** until all applicable items pass:
 
-- [ ] Implementation matches plan unit `Goal`, `Files`, `Verification`
-- [ ] Tests or doc verification (see table below)
-- [ ] Review skill invoked and findings addressed (no skip)
+- [ ] **RED** — failing test or doc checklist item exists *before* implementation (code units with `Test scenarios` in plan; doc units: gap list)
+- [ ] **GREEN** — implementation satisfies plan unit `Goal`, `Files`; tests pass
+- [ ] **VERIFY** — plan unit `Verification` commands run in Docker (or doc read-back checklist)
+- [ ] **LAYER** — applicable [layer gates](#layer-gates) pass (not only pytest when broadcast/gateway/player touched)
+- [ ] **REVIEW** — review skill invoked and findings addressed (no skip)
 - [ ] `ce-compound` if non-trivial learnings (R29)
 - [ ] User explicitly requested commit (if committing)
+
+Workers dispatch with TDD order (see `docs/prompts/orchestrator-phases.md` Worker template). Orchestrator rejects a unit if GREEN landed without RED evidence when plan lists `Test scenarios`.
 
 ### Execution steps
 
 ```
 1. ce-work scope  — read plan unit only; create Task list with U-ID prefix
-2. implement      — inline OR subagents (see dispatch table)
-3. verify         — tests (Docker) or doc checklist
-4. review         — MANDATORY separate skill invocation (not inline self-review)
-5. ce-compound    — docs/solutions/ when warranted
-6. commit         — only when user asks
+2. red            — worker writes failing test or documents expected failure
+3. implement      — inline OR subagents (see dispatch table); green tests
+4. verify         — plan Verification + applicable layer gates (Docker)
+5. review         — MANDATORY separate skill invocation (not inline self-review)
+6. ce-compound    — docs/solutions/ when warranted
+7. commit         — only when user asks
 ```
+
+### Layer gates
+
+Run in Docker only (ADR-003). Apply after each code unit that touches the layer; orchestrator runs the full applicable set at **phase exit** (mandatory — do not merge a phase with pytest green while liquidsoap crash-loops or gateway returns 502).
+
+| Gate | Command | When |
+|------|---------|------|
+| **A — pytest** | `docker compose run --rm test pytest tests/ -q` | Every code unit; phase exit |
+| **B — liquidsoap** | `docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq` | Units touching `broadcast/liquidsoap/`; phase exit |
+| **C — gateway mounts** | `curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/moscow` and `/spb` → expect `200` (stack up) | Units touching gateway/nginx/player; phase exit |
+| **D — e2e** | `docker compose run --rm e2e` | Player/gateway/geo units; phase exit |
+| **E — acceptance** | `bash scripts/verify_acceptance.sh --phase N` (add `--allow-manual` when plan defers manual AEs) | Phase exit; maps `spec/acceptance.yaml` to gates |
+
+Gate **C** requires `docker compose up` (or healthy dev stack). Gate **E** is added by plan [U-TDD-5](docs/plans/2026-06-11-003-feat-tdd-agent-workflow-gates.md); reference it even if the script is not on branch yet.
+
+### Phase exit gates (orchestrator mandatory)
+
+Before declaring a phase complete or requesting merge, the orchestrator **must** run all gates applicable to that phase and report pass/fail:
+
+```bash
+docker compose run --rm test pytest tests/ -q
+docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq
+curl -sf -o /dev/null -w "%{http_code}\n" http://localhost:8080/moscow http://localhost:8080/spb   # each 200
+docker compose run --rm e2e
+bash scripts/verify_acceptance.sh --phase N --allow-manual   # N = phase number; strict without --allow-manual when script supports it
+```
+
+Skip gate B only when the phase did not touch Liquidsoap and branch tip matches `main` broadcast config. Skip gate D only for doc-only phases (0). A phase with **any** pytest failure or gateway non-200 is **not** exit-ready.
 
 ### Subagent dispatch (orchestrator chooses)
 
@@ -115,14 +148,24 @@ Run tests via Docker (see Commands). Do not skip tests when the plan unit define
 # Dev stack (U4+) — Compose is development-only
 docker compose up
 
-# Unit / integration tests (U5+) — run inside test image
+# Layer gate A — unit / integration tests (U5+)
 docker compose run --rm test pytest tests/
 docker compose run --rm test pytest tests/test_injector.py -v
 
-# E2E player (U7+)
+# Layer gate B — Liquidsoap compile check (no live stack)
+docker compose run --rm --no-deps liquidsoap liquidsoap --check /broadcast/liquidsoap/fm21.liq
+
+# Layer gate C — gateway mount smoke (stack must be up; gateway :8080)
+curl -sf -o /dev/null -w "%{http_code}\n" http://localhost:8080/moscow
+curl -sf -o /dev/null -w "%{http_code}\n" http://localhost:8080/spb
+
+# Layer gate D — E2E player (U7+)
 docker compose run --rm e2e
 
-# Smoke: ICY mount headers
+# Layer gate E — acceptance.yaml → docker commands (U-TDD-5)
+bash scripts/verify_acceptance.sh --phase 3 --allow-manual
+
+# Direct Icecast smoke (optional; gateway is canonical for listeners)
 curl -I http://localhost:8000/moscow
 
 # Phase 2+ (Postgres, music)

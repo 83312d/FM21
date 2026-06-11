@@ -16,6 +16,7 @@ from services.db.models import NewsItem, NewsItemStatus
 from services.db.session import async_session_factory
 from services.news.db.repository import NewsItemRepository
 from services.news.fetcher.rss import DEFAULT_TIMEOUT_SEC, fetch_article_body
+from services.news.http import http_verify_ssl
 from services.news.summarizer.gigachat_client import (
     SummarizerClient,
     create_summarizer_client,
@@ -109,7 +110,9 @@ class NewsSummarizeWorker:
         self._stats = SummarizeStats()
         timeout = httpx.Timeout(self.timeout_sec)
 
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http_client:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True, verify=http_verify_ssl()
+        ) as http_client:
             async with self.session_factory()() as session:
                 repo = NewsItemRepository(session)
                 items = await _list_fetched_items(session)
