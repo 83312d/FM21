@@ -3,6 +3,14 @@
 # Secrets and local env
 .env
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Runtime-generated ads (voice transcodes)
 data/ads/*
 

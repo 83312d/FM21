@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>FM21 Test Feed</title>
+    <link>https://example.com/</link>
+    <description>Fixture RSS for U16 fetcher tests</description>
+    <item>
+      <title>First IT headline</title>
+      <link>https://example.com/news/first-article</link>
+      <description>This is a long enough RSS snippet for the fetcher to use without downloading the full article page. It describes a product launch in the Russian IT market with enough detail to exceed the minimum snippet threshold used by the news ingest worker during normal operation. Additional padding ensures the description remains above five hundred characters so unit tests avoid live HTTP article fetches while still exercising the RSS ingest path end to end in Docker without external network dependencies for canonical article URLs in the fixture feed.</description>
+    </item>
+    <item>
+      <title>Second IT headline</title>
+      <link>https://example.com/news/second-article</link>
+      <description>Another sufficiently long RSS description for testing ingest. The body includes context about cloud infrastructure, developer tooling, and regional technology adoption trends so content hashing remains stable across test runs. Padding text keeps this RSS summary above the five hundred character threshold required by the fetch worker before it decides to download the full HTML article page from the linked source URL during automated tests. More filler words about platforms, APIs, and release cadence keep this fixture hermetic.</description>
+    </item>
+  </channel>
+</rss>

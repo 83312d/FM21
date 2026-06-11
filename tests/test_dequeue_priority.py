@@ -253,6 +253,101 @@ def test_mixed_queue_full_priority_order(queue_client: QueueClient) -> None:
     assert queue_client.list_items(CITY) == []
 
 
+def test_ae2_ad_enqueued_mid_news_pair_waits_until_block_end(queue_client: QueueClient) -> None:
+    """AE2: AD submitted during NEWS_PAIR playback stays pending until block ends."""
+    _enqueue(
+        queue_client,
+        item_type="NEWS_PAIR",
+        uri="file:///data/news/segment.mp3",
+        title="Headline",
+        duration_sec=90,
+        extra_meta={"stinger_uri": "file:///data/news/stinger.mp3"},
+    )
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 2
+    assert _parse_line(lines[0])["part"] == "stinger"
+    assert _parse_line(lines[1])["part"] == "main"
+    assert queue_client.list_items(CITY) == []
+
+    ad = _enqueue(
+        queue_client,
+        item_type="AD",
+        uri="file:///data/ads/mid-news.mp3",
+        title="Voice ad",
+        duration_sec=42,
+    )
+    pending = queue_client.list_items(CITY)
+    assert len(pending) == 1
+    assert pending[0]["type"] == "AD"
+    assert pending[0]["uri"] == ad["uri"]
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 1
+    picked = _parse_line(lines[0])
+    assert picked["type"] == "AD"
+    assert picked["uri"] == ad["uri"]
+
+
+def test_ae2_ad_before_news_pair_dequeues_first(queue_client: QueueClient) -> None:
+    """AE2: higher-priority AD in queue plays before NEWS_PAIR after current block."""
+    news = _enqueue(
+        queue_client,
+        item_type="NEWS_PAIR",
+        uri="file:///data/news/main.mp3",
+        title="News",
+        extra_meta={"stinger_uri": "file:///data/news/stinger.mp3"},
+    )
+    ad = _enqueue(
+        queue_client,
+        item_type="AD",
+        uri="file:///data/ads/first.mp3",
+        title="Ad",
+        duration_sec=30,
+    )
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 1
+    assert _parse_line(lines[0])["type"] == "AD"
+    assert _parse_line(lines[0])["uri"] == ad["uri"]
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 2
+    assert _parse_line(lines[0])["part"] == "stinger"
+    assert _parse_line(lines[1])["uri"] == news["uri"]
+    assert queue_client.list_items(CITY) == []
+
+
+def test_ae2_news_pair_atomic_single_dequeue(queue_client: QueueClient) -> None:
+    """AE2/FG6: stinger and main come from one dequeue — nothing inserts between them."""
+    _enqueue(
+        queue_client,
+        item_type="MUSIC",
+        uri="file:///music/filler.mp3",
+        title="Filler",
+    )
+    news = _enqueue(
+        queue_client,
+        item_type="NEWS_PAIR",
+        uri="file:///data/news/main.mp3",
+        title="News",
+        extra_meta={"stinger_uri": "file:///data/news/stinger.mp3"},
+    )
+
+    lines = _run_dequeue(queue_client)
+    assert len(lines) == 2
+    stinger = _parse_line(lines[0])
+    main = _parse_line(lines[1])
+    assert stinger["part"] == "stinger"
+    assert stinger["uri"] == news["meta"]["stinger_uri"]
+    assert main["part"] == "main"
+    assert main["uri"] == news["uri"]
+
+    remaining = queue_client.list_items(CITY)
+    assert len(remaining) == 1
+    assert remaining[0]["type"] == "MUSIC"
+
+
 def test_dequeue_preserves_pipe_in_https_url(queue_client: QueueClient) -> None:
     """Yandex signed URLs may contain '|' — tab delimiter must not truncate uri."""
     signed = "https://api.music.yandex.net/get-mp3/abc|def/U2FsdGVkX1_test"

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>FM21 Short Snippet Feed</title>
+    <link>https://example.com/</link>
+    <description>Snippet below 500 chars triggers article fetch</description>
+    <item>
+      <title>Short teaser</title>
+      <link>https://example.com/news/short-article</link>
+      <description>Too short.</description>
+    </item>
+  </channel>
+</rss>

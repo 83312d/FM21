@@ -9,7 +9,7 @@ source_docs:
   - docs/contracts/listener-contract.md
   - docs/contracts/operator-contract.md
   - docs/openapi.yaml
-last_updated: "2026-06-08"
+last_updated: "2026-06-11"
 
 acceptance:
 
@@ -43,9 +43,8 @@ acceptance:
   - id: AE2
     title: Voice ad waits for current news block — no interrupt
     covers: [R5, R6]
-    phase: 2
-    deferred: true
-    note: Phase 2+ — requires NEWS_PAIR blocks and mixed-type queue dequeue (U10)
+    phase: 3
+    deferred: false
     given:
       - A news segment (NEWS_PAIR block) is currently playing on a city mount
       - Broadcast consumer is mid-block; dequeue suspended per no-interrupt rule
@@ -62,17 +61,17 @@ acceptance:
       - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
       - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
     verification:
-      - pytest: tests/test_injector.py (enqueue during simulated NEWS_PAIR — deferred U10)
+      - pytest: tests/test_injector.py::test_ae2_injector_accepts_ad_during_simulated_news_pair_playback
+      - pytest: tests/test_dequeue_priority.py (AE2 queue-order scenarios)
       - integration: log tail of Liquidsoap + redis queue order during news playback
       - manual: submit voice ad during live news block; confirm no audio cut
-    units: [U5, U10]
+    units: [U15, U16, U17, U18, U19, U20, U21, U22, U23]
 
   - id: AE3
     title: News item play cap and cached audio reuse
-    covers: [R7, R8]
-    phase: 2
-    deferred: true
-    note: Phase 3 news pipeline — 15-minute cron, TTS, play-count persistence (U10)
+    covers: [R7, R8, R14]
+    phase: 3
+    deferred: false
     given:
       - A specific news item has been played 3 times in the last 24 hours for a city
       - 15-minute news slot fires for that city
@@ -84,13 +83,20 @@ acceptance:
       - If the same item must repeat (no alternatives), cached audio is reused without new TTS synthesis
       - Play count tracking respects max 3 plays per 24h per item hash
       - NEWS_PAIR enqueued at priority 80 after current block ends
+      - GET /api/now-playing/{cityTag} reports content_type news during NEWS_PAIR playback
+      - Bot /status reports time until next news slot from UTC slot clock
     contract_refs:
       - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
+      - docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3
+      - docs/contracts/operator-contract.md#5-bot-commands-phase-2-music
     verification:
-      - pytest: news scheduler unit tests (deferred U10)
+      - pytest: tests/test_news_selection.py (play cap skip and fallback)
+      - pytest: tests/test_news_materialize.py (cached audio reuse — TTS call count 0)
+      - pytest: tests/test_news_play_count.py (Redis fm21:news:played:{hash} TTL)
+      - pytest: tests/test_dequeue_priority.py (NEWS_PAIR priority 80)
+      - pytest: tests/test_metadata_news.py (content_type news, /status next_news_at)
       - redis-check: fm21:news:played:{hash} counts and TTL
-      - manual: force 3 plays then observe 4th slot selection and TTS call count
-    units: [U10]
+    units: [U19, U20, U21, U22, U23]
 
   - id: AE4
     title: City badge with change control — no blocking modal on geo denial

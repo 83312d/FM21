@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>FM21 Duplicate URL Feed</title>
+    <link>https://example.com/</link>
+    <description>Same article URL appears twice</description>
+    <item>
+      <title>Duplicate headline</title>
+      <link>https://example.com/news/duplicate-article</link>
+      <description>First occurrence of a long RSS snippet describing the same article URL that will appear again in this fixture feed to verify deduplication by normalized source URL during ingest. Extra padding keeps this description above five hundred characters so the worker uses the RSS text directly and tests do not depend on outbound HTTP requests to example.com article pages during CI runs. Additional neutral filler about software releases and infrastructure upgrades extends this RSS summary for hermetic Docker tests.</description>
+    </item>
+    <item>
+      <title>Duplicate headline again</title>
+      <link>https://example.com/news/duplicate-article</link>
+      <description>Second occurrence with different description text but identical canonical URL so only one news_items row should be created by the fetch worker. Additional filler text ensures this RSS summary also exceeds five hundred characters and avoids triggering article body fetches in unit tests that should remain hermetic and fast inside the Docker test container. More padding about databases, observability, and developer experience keeps the snippet safely above the fetch threshold.</description>
+    </item>
+  </channel>
+</rss>
