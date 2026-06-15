@@ -1,15 +1,21 @@
-# FM21 development stack only (ADR-003). Staging/production use deploy/ (U11).
-name: fm21
+# FM21 local production stack (U30) — single-VM Docker, HTTP on localhost.
+# Dev stack remains root docker-compose.yml (ADR-003). Do not use this file for day-to-day dev.
+#
+# Quickstart:
+#   cp deploy/production/env.template .env   # fill secrets locally; never commit .env
+#   docker compose -f deploy/production/docker-compose.prod.yml up -d --build
+#   curl -sf http://127.0.0.1:8080/api/health
+name: fm21-prod
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fm21}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fm21dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-fm21}
-    ports:
-      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fm21} -d ${POSTGRES_DB:-fm21}"]
       interval: 5s
@@ -19,14 +25,11 @@ services:
 
   db-migrate:
     build:
-      context: .
-      dockerfile: docker/python.Dockerfile
-      target: base
+      context: ../..
+      dockerfile: deploy/production/python-glue.Dockerfile
     command: ["python", "-m", "services.db.migrate"]
     environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-    volumes:
-      - .:/app
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,8 +37,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -45,14 +46,10 @@ services:
 
   icecast:
     build:
-      context: .
-      dockerfile: docker/icecast.Dockerfile
+      context: ../..
+      dockerfile: deploy/production/icecast.Dockerfile
     environment:
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-fm21dev}
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./broadcast/icecast/icecast.xml:/etc/icecast2/icecast.xml:ro
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:?set ICECAST_SOURCE_PASSWORD in .env}
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/status-json.xsl > /dev/null"]
       interval: 10s
@@ -63,13 +60,12 @@ services:
 
   liquidsoap:
     build:
-      context: .
-      dockerfile: docker/liquidsoap.Dockerfile
+      context: ../..
+      dockerfile: deploy/production/liquidsoap.Dockerfile
     environment:
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-fm21dev}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD}
     volumes:
-      - ./broadcast:/broadcast:ro
-      - ./data:/data:ro
+      - fm21_data:/data:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -89,16 +85,14 @@ services:
 
   injector:
     build:
-      context: .
+      context: ../..
       dockerfile: docker/injector.Dockerfile
     environment:
-      REDIS_URL: redis://redis:6379/0
-      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:?set INTERNAL_ENQUEUE_TOKEN in .env}
       MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
       MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
       CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-    volumes:
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -106,19 +100,18 @@ services:
 
   ads:
     build:
-      context: .
+      context: ../..
       dockerfile: docker/ads.Dockerfile
     environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      DATABASE_URL: ${DATABASE_URL}
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN}
       INJECTOR_URL: http://injector:8080
       MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
       MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
       CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
       ADS_DIR: /data/ads
     volumes:
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-      - ./data:/data
+      - fm21_data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,37 +125,30 @@ services:
 
   geo:
     build:
-      context: .
-      dockerfile: docker/python.Dockerfile
-      target: base
+      context: ../..
+      dockerfile: deploy/production/python-glue.Dockerfile
     command: ["uvicorn", "services.geo.main:app", "--host", "0.0.0.0", "--port", "8080"]
-    ports:
-      - "8081:8080"
     environment:
       DEFAULT_CITY_TAG: ${DEFAULT_CITY_TAG:-moscow}
       GEOIP_DB_PATH: ${GEOIP_DB_PATH:-/data/GeoLite2-City.mmdb}
       CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1}
     volumes:
-      - ./broadcast:/broadcast:ro
-      - ./data:/data:ro
+      - fm21_data:/data:ro
     restart: unless-stopped
 
   metadata:
     build:
-      context: .
-      dockerfile: docker/python.Dockerfile
-      target: base
+      context: ../..
+      dockerfile: deploy/production/python-glue.Dockerfile
     command: ["uvicorn", "services.metadata.main:app", "--host", "0.0.0.0", "--port", "8080"]
     environment:
-      REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DATABASE_URL: ${DATABASE_URL}
       ICECAST_HOST: icecast
       ICECAST_PORT: "8000"
       CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
       DEFAULT_CITY_TAG: ${DEFAULT_CITY_TAG:-moscow}
-    volumes:
-      - ./broadcast:/broadcast:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -170,14 +156,188 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  news-fetch:
+    build:
+      context: ../..
+      dockerfile: docker/news.Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      NEWS_SOURCES_PATH: /app/services/news/sources.yaml
+      NEWS_FETCH_INTERVAL_SEC: "600"
+      FM21_CERTS_DIR: /certs
+    volumes:
+      - fm21_certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-materialize:
+    build:
+      context: ../..
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.materialize_cron"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      SALUTESPEECH_CREDENTIALS: ${SALUTESPEECH_CREDENTIALS:-}
+      SALUTESPEECH_SCOPE: ${SALUTESPEECH_SCOPE:-SALUTE_SPEECH_PERS}
+      SALUTESPEECH_VOICE: ${SALUTESPEECH_VOICE:-Nec_24000}
+      SALUTESPEECH_VERIFY_SSL_CERTS: ${SALUTESPEECH_VERIFY_SSL_CERTS:-true}
+      FM21_CERTS_DIR: /certs
+    volumes:
+      - fm21_data:/data
+      - fm21_certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-enqueue:
+    build:
+      context: ../..
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.enqueue_cron"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN}
+      INJECTOR_URL: http://injector:8080
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      NEWS_AUDIO_DIR: /data/news
+    volumes:
+      - fm21_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      injector:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  news-play-count-reset:
+    build:
+      context: ../..
+      dockerfile: docker/news.Dockerfile
+    command: ["python", "-m", "services.news.workers.play_count_reset"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  cron:
+    build:
+      context: ../..
+      dockerfile: docker/cron.Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ADS_DIR: /data/ads
+    volumes:
+      - fm21_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  music-worker:
+    build:
+      context: ../..
+      dockerfile: docker/music-worker.Dockerfile
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DATABASE_URL: ${DATABASE_URL}
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN}
+      INJECTOR_URL: http://injector:8080
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      PLAYLIST_RULES_PATH: /app/services/music/playlist_rules.yaml
+      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
+      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
+      STATIC_MUSIC_DIR: /data/music/static
+      MUSIC_BUFFER_TARGET: ${MUSIC_BUFFER_TARGET:-10}
+      MUSIC_BUFFER_POLL_INTERVAL_SEC: ${MUSIC_BUFFER_POLL_INTERVAL_SEC:-15}
+    volumes:
+      - fm21_data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      injector:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ../..
+      dockerfile: docker/bot.Dockerfile
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN in .env}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:?set TELEGRAM_WEBHOOK_SECRET in .env}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      BOT_MODE: ${BOT_MODE:-polling}
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN}
+      INJECTOR_URL: http://injector:8080
+      ADS_URL: http://ads:8080
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      DEFAULT_OPERATOR_CITY: ${DEFAULT_OPERATOR_CITY:-moscow}
+      TELEGRAM_OPERATOR_IDS: ${TELEGRAM_OPERATOR_IDS:-}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
+      BOT_OPEN_ACCESS: ${BOT_OPEN_ACCESS:-0}
+      MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
+      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
+      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
+      DATABASE_URL: ${DATABASE_URL}
+      METADATA_URL: http://metadata:8080
+      LISTENER_BASE_URL: ${LISTENER_BASE_URL:-http://127.0.0.1:8080}
+    depends_on:
+      metadata:
+        condition: service_started
+      ads:
+        condition: service_started
+      injector:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   gateway:
     build:
-      context: .
-      dockerfile: docker/gateway.Dockerfile
+      context: ../..
+      dockerfile: deploy/production/gateway/Dockerfile
       args:
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       geo:
         condition: service_started
@@ -195,222 +355,7 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  news-fetch:
-    build:
-      context: .
-      dockerfile: docker/news.Dockerfile
-    environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      NEWS_SOURCES_PATH: /app/services/news/sources.yaml
-      NEWS_FETCH_INTERVAL_SEC: "600"
-      FM21_CERTS_DIR: /certs
-    volumes:
-      - ./services:/app/services:ro
-      - ./certs:/certs:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  news-materialize:
-    build:
-      context: .
-      dockerfile: docker/news.Dockerfile
-    command: ["python", "-m", "services.news.workers.materialize_cron"]
-    environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      REDIS_URL: redis://redis:6379/0
-      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-      GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
-      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
-      SALUTESPEECH_CREDENTIALS: ${SALUTESPEECH_CREDENTIALS:-}
-      SALUTESPEECH_SCOPE: ${SALUTESPEECH_SCOPE:-SALUTE_SPEECH_PERS}
-      SALUTESPEECH_VOICE: ${SALUTESPEECH_VOICE:-Nec_24000}
-      SALUTESPEECH_VERIFY_SSL_CERTS: ${SALUTESPEECH_VERIFY_SSL_CERTS:-true}
-      FM21_CERTS_DIR: /certs
-    volumes:
-      - ./services:/app/services:ro
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-      - ./data:/data
-      - ./certs:/certs:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  news-enqueue:
-    build:
-      context: .
-      dockerfile: docker/news.Dockerfile
-    command: ["python", "-m", "services.news.workers.enqueue_cron"]
-    environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      REDIS_URL: redis://redis:6379/0
-      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
-      INJECTOR_URL: http://injector:8080
-      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
-      NEWS_AUDIO_DIR: /data/news
-    volumes:
-      - ./services:/app/services:ro
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-      - ./data:/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      injector:
-        condition: service_started
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  news-play-count-reset:
-    build:
-      context: .
-      dockerfile: docker/news.Dockerfile
-    command: ["python", "-m", "services.news.workers.play_count_reset"]
-    environment:
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      REDIS_URL: redis://redis:6379/0
-    volumes:
-      - ./services:/app/services:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  music-worker:
-    build:
-      context: .
-      dockerfile: docker/music-worker.Dockerfile
-    environment:
-      REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
-      INJECTOR_URL: http://injector:8080
-      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
-      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-      PLAYLIST_RULES_PATH: /app/services/music/playlist_rules.yaml
-      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
-      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
-      STATIC_MUSIC_DIR: /data/music/static
-      MUSIC_BUFFER_TARGET: ${MUSIC_BUFFER_TARGET:-10}
-      MUSIC_BUFFER_POLL_INTERVAL_SEC: ${MUSIC_BUFFER_POLL_INTERVAL_SEC:-15}
-    volumes:
-      - ./services:/app/services:ro
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-      - ./data:/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      injector:
-        condition: service_started
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  bot:
-    build:
-      context: .
-      dockerfile: docker/bot.Dockerfile
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8082:8080"
-    environment:
-      TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-http://host.docker.internal:7890}
-      HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
-      HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
-      NO_PROXY: localhost,127.0.0.1,postgres,redis,injector,ads,metadata,geo,icecast,liquidsoap,bot,news-fetch,news-summarize,news-materialize,news-enqueue,music-worker,gateway
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-fm21dev-webhook}
-      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
-      # polling = local dev without ngrok; webhook = production (needs TELEGRAM_WEBHOOK_URL)
-      BOT_MODE: ${BOT_MODE:-polling}
-      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
-      INJECTOR_URL: http://injector:8080
-      ADS_URL: http://ads:8080
-      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-      DEFAULT_OPERATOR_CITY: ${DEFAULT_OPERATOR_CITY:-moscow}
-      TELEGRAM_OPERATOR_IDS: ${TELEGRAM_OPERATOR_IDS:-}
-      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
-      BOT_OPEN_ACCESS: ${BOT_OPEN_ACCESS:-1}
-      MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
-      MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
-      YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      METADATA_URL: http://metadata:8080
-      LISTENER_BASE_URL: ${LISTENER_BASE_URL:-http://localhost:8080}
-    volumes:
-      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-    depends_on:
-      metadata:
-        condition: service_started
-      ads:
-        condition: service_started
-      injector:
-        condition: service_started
-      postgres:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  test:
-    profiles: ["test"]
-    build:
-      context: .
-      dockerfile: docker/python.Dockerfile
-      target: test
-    volumes:
-      - .:/app
-    environment:
-      REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
-      ICECAST_HOST: icecast
-      ICECAST_PORT: "8000"
-      CITIES_YAML_PATH: /app/broadcast/liquidsoap/cities.yaml
-      DEFAULT_CITY_TAG: moscow
-      GEOIP_DB_PATH: /nonexistent/GeoLite2-City.mmdb
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  e2e:
-    profiles: ["e2e"]
-    build:
-      context: .
-      dockerfile: docker/python.Dockerfile
-      target: e2e
-    volumes:
-      - .:/app
-      - e2e_node_modules:/app/node_modules
-    environment:
-      FM21_GATEWAY_URL: http://gateway
-      AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium
-    depends_on:
-      gateway:
-        condition: service_healthy
-      liquidsoap:
-        condition: service_healthy
-      metadata:
-        condition: service_started
-
 volumes:
-  e2e_node_modules:
+  pgdata:
+  fm21_data:
+  fm21_certs:

@@ -1,0 +1,21 @@
+# FM21 alert rules (U31 stub — wire to Alertmanager when needed).
+groups:
+  - name: fm21-stream
+    rules:
+      - alert: Fm21PublicHealthDegraded
+        expr: probe_success{job="fm21-gateway"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: FM21 public health degraded
+          description: Gateway /api/health is not returning ok for 2 minutes.
+
+      - alert: Fm21StreamMountDown
+        expr: probe_success{job="fm21-metadata-internal"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: FM21 deep health failing
+          description: Metadata /internal/health reports degraded components.

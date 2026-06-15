@@ -22,7 +22,7 @@ from telegram.ext import (
 )
 
 from services.bot.middleware.auth import auth_middleware
-from services.common.security import secrets_match
+from services.bot.webhook import TELEGRAM_WEBHOOK_SECRET, validate_webhook_secret
 
 from services.bot.handlers.city import ad_city_callback, city_command
 from services.bot.handlers.order import order_callback, order_command
@@ -33,10 +33,8 @@ from services.bot.handlers.voice import voice_message
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 TELEGRAM_WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
-BOT_OPEN_ACCESS = os.environ.get("BOT_OPEN_ACCESS", "").strip() == "1"
-BOT_MODE = os.environ.get("BOT_MODE", "webhook").strip().lower()
+BOT_MODE = os.environ.get("BOT_MODE", "polling").strip().lower()
 
 bot_application: Application | None = None
 
@@ -148,29 +146,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FM21 Telegram Bot", lifespan=lifespan)
 
 
-def _validate_webhook_secret(
-    x_telegram_bot_api_secret_token: str | None,
-) -> None:
-    if not TELEGRAM_WEBHOOK_SECRET:
-        if BOT_OPEN_ACCESS:
-            return
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="TELEGRAM_WEBHOOK_SECRET not configured",
-        )
-    if not secrets_match(x_telegram_bot_api_secret_token, TELEGRAM_WEBHOOK_SECRET):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing webhook secret",
-        )
-
-
 @app.post("/api/bot/webhook")
 async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict[str, bool]:
-    _validate_webhook_secret(x_telegram_bot_api_secret_token)
+    validate_webhook_secret(x_telegram_bot_api_secret_token)
 
     if bot_application is None:
         raise HTTPException(
