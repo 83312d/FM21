@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from services.common.security import secrets_match
 from services.injector.fanout import ENQUEUE_TYPES, load_active_cities, prepare_enqueue
 from services.injector.queue import QueueClient, QueueFullError
 
@@ -54,7 +55,7 @@ def _require_internal_token(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="INTERNAL_ENQUEUE_TOKEN not configured",
         )
-    if x_fm21_internal_token != internal_token:
+    if not secrets_match(x_fm21_internal_token, internal_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing internal token",

@@ -101,8 +101,13 @@ Optional player copy (not blocking): «Общий эфир — вы подклю
 
 - Poll `GET /api/now-playing/{cityTag}` every **5 seconds** while playing.
 - Display: title, artist (if applicable), content type label: `music` | `news` | `ad`.
+- `remaining_sec` (seconds left in the current block) is available on the now-playing response when the server can compute it from `started_at` + `duration_sec`.
 - If metadata API fails, keep audio playing; show last known or placeholder text.
 - Metadata channel is independent of audio stream — audio survives metadata outage.
+
+### Queue preview (Phase 4+, R30)
+
+**OpenAPI:** `GET /api/queue/{cityTag}` — up to five pending items in playback order (listener-safe fields: title, artist, content_type, duration_sec). Used by the web player and operator `/status`; not a per-listener personalized queue.
 
 ---
 
@@ -177,6 +182,6 @@ If the ICY mount fails to connect or returns HTTP errors, keep the player UI usa
 
 - HLS manifest or WebSocket audio in Phase 1
 - Listener accounts or saved playlists
-- Per-listener queue preview on public API (operator `/status` only)
+- Per-listener personalized queue (shared city timeline preview is public via `/api/queue/{cityTag}`)
 - Blocking geo consent modal
 - Full WCAG audit in Phase 1 (baseline a11y: keyboard-focusable Play, labeled city control — detailed in U7)

@@ -77,7 +77,7 @@ Workers dispatch with TDD order (see `docs/prompts/orchestrator-phases.md` Worke
 ```
 1. ce-work scope  — read plan unit only; create Task list with U-ID prefix
 2. red            — worker writes failing test or documents expected failure
-3. implement      — inline OR subagents (see dispatch table); green tests
+3. implement      — Task subagent per code unit (orchestrator does NOT implement); green tests
 4. verify         — plan Verification + applicable layer gates (Docker)
 5. review         — MANDATORY separate skill invocation (not inline self-review)
 6. ce-compound    — docs/solutions/ when warranted
@@ -117,10 +117,10 @@ Skip gate B only when the phase did not touch Liquidsoap and branch tip matches 
 | Unit type | Default strategy | When to parallelize |
 |-----------|------------------|---------------------|
 | **Docs** (U1–U3) | **Parallel:** 1 subagent per file group — ADRs (`docs/adr/`), contracts (`docs/contracts/`), spec (`spec/` + OpenAPI) | U2: dispatch 2 agents (ADRs batch + contracts batch) in parallel |
-| **Code** (U4+) | **Serial** unless plan `Files:` lists have zero intersection | U4 ∥ U6 after U2: separate worktrees (`ce-worktree`) |
-| **Trivial** (typo, one file) | Inline OK | Never |
+| **Code** (U4+) | **MUST** dispatch Task subagent per unit (serial); orchestrator never implements | Parallel Task only when plan `Files:` have zero intersection; use `ce-worktree` if needed |
+| **Trivial** (typo, one-line post-review) | Orchestrator inline OK | Never for full units |
 
-`ce-work` defaults to **inline** unless the prompt says `use subagents` or the table above applies. For FM21, **docs and code units use subagents by default.**
+Orchestrator sessions for phases 1–5: **subagents mandatory** for every code unit. Inline implementation by the orchestrator = workflow violation.
 
 ### Review gate (MANDATORY — separate skill, not self-review)
 

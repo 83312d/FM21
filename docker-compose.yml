@@ -104,6 +104,32 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  ads:
+    build:
+      context: .
+      dockerfile: docker/ads.Dockerfile
+    environment:
+      DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
+      INJECTOR_URL: http://injector:8080
+      MAX_PENDING_ADS_PER_CITY: ${MAX_PENDING_ADS_PER_CITY:-5}
+      MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
+      CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
+      ADS_DIR: /data/ads
+    volumes:
+      - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      injector:
+        condition: service_started
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   geo:
     build:
       context: .
@@ -296,25 +322,41 @@ services:
     build:
       context: .
       dockerfile: docker/bot.Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8082:8080"
     environment:
+      TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-http://host.docker.internal:7890}
+      HTTP_PROXY: ${HTTP_PROXY:-http://host.docker.internal:7890}
+      HTTPS_PROXY: ${HTTPS_PROXY:-http://host.docker.internal:7890}
+      NO_PROXY: localhost,127.0.0.1,postgres,redis,injector,ads,metadata,geo,icecast,liquidsoap,bot,news-fetch,news-summarize,news-materialize,news-enqueue,music-worker,gateway
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-fm21dev-webhook}
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      # polling = local dev without ngrok; webhook = production (needs TELEGRAM_WEBHOOK_URL)
+      BOT_MODE: ${BOT_MODE:-polling}
       INTERNAL_ENQUEUE_TOKEN: ${INTERNAL_ENQUEUE_TOKEN:-fm21dev-internal}
       INJECTOR_URL: http://injector:8080
+      ADS_URL: http://ads:8080
       CITIES_YAML_PATH: /broadcast/liquidsoap/cities.yaml
-      ADS_DIR: /data/ads
       DEFAULT_OPERATOR_CITY: ${DEFAULT_OPERATOR_CITY:-moscow}
+      TELEGRAM_OPERATOR_IDS: ${TELEGRAM_OPERATOR_IDS:-}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
+      BOT_OPEN_ACCESS: ${BOT_OPEN_ACCESS:-1}
       MAX_AD_DURATION_SEC: ${MAX_AD_DURATION_SEC:-60}
       MUSIC_PROVIDER: ${MUSIC_PROVIDER:-static}
       YANDEX_MUSIC_OAUTH_TOKEN: ${YANDEX_MUSIC_OAUTH_TOKEN:-}
       DATABASE_URL: postgresql://fm21:fm21dev@postgres:5432/fm21
+      METADATA_URL: http://metadata:8080
+      LISTENER_BASE_URL: ${LISTENER_BASE_URL:-http://localhost:8080}
     volumes:
       - ./broadcast/liquidsoap/cities.yaml:/broadcast/liquidsoap/cities.yaml:ro
-      - ./data:/data
     depends_on:
+      metadata:
+        condition: service_started
+      ads:
+        condition: service_started
       injector:
         condition: service_started
       postgres:

@@ -56,6 +56,12 @@ class TestParseOrderArgs:
             "Queen",
         )
 
+    def test_valid_ascii_hyphen(self) -> None:
+        assert parse_order_args(["Blinding", "Lights", "-", "The", "Weeknd"]) == (
+            "Blinding Lights",
+            "The Weeknd",
+        )
+
     def test_missing_separator(self) -> None:
         assert parse_order_args(["Title", "Artist"]) is None
 

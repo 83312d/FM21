@@ -1,8 +1,37 @@
 # Canonical active-city list (Broadcast Semantics §2, Listener Contract §3).
 # Human-maintained. Each tag maps to Icecast mount /{tag} and Redis fm21:queue:{tag}.
 # Geo service and OpenAPI CityTag enum read this file — do not duplicate city lists.
+#
+# Optional fields per city (U29):
+#   display_name — listener/operator badge (defaults to name)
+#   lat, lon     — WGS-84 centroid for reverse geocode / nearest-city
+#   aliases      — GeoIP name variants (case-insensitive)
 cities:
   - tag: moscow
     name: Moscow
+    display_name: Москва
+    lat: 55.7558
+    lon: 37.6173
+    aliases:
+      - москва
   - tag: spb
     name: Saint Petersburg
+    display_name: Санкт-Петербург
+    lat: 59.9343
+    lon: 30.3351
+    aliases:
+      - saint petersburg
+      - st petersburg
+      - st. petersburg
+      - sankt-peterburg
+      - sankt peterburg
+      - санкт-петербург
+      - spb
+  - tag: ekb
+    name: Yekaterinburg
+    display_name: Екатеринбург
+    lat: 56.8389
+    lon: 60.6057
+    aliases:
+      - yekaterinburg
+      - екатеринбург

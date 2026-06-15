@@ -16,6 +16,7 @@ from services.db.models import (
     BroadcastLog,
     NewsItem,
     NewsItemStatus,
+    OperatorPrefs,
     PlaylistConfig,
     TrackCache,
 )
@@ -39,6 +40,7 @@ async def migrated_db():
     async with engine.begin() as conn:
         for table in (
             "broadcast_log",
+            "operator_prefs",
             "playlist_config",
             "tracks_cache",
             "ads",
@@ -64,7 +66,8 @@ async def test_migration_applies_fresh(migrated_db):
                 WHERE table_schema = 'public'
                   AND table_name IN (
                     'news_items', 'ads', 'tracks_cache',
-                    'playlist_config', 'broadcast_log', 'schema_migrations'
+                    'playlist_config', 'broadcast_log', 'operator_prefs',
+                    'schema_migrations'
                   )
                 ORDER BY table_name
                 """
@@ -76,6 +79,7 @@ async def test_migration_applies_fresh(migrated_db):
         "ads",
         "broadcast_log",
         "news_items",
+        "operator_prefs",
         "playlist_config",
         "schema_migrations",
         "tracks_cache",

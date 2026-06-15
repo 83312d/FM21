@@ -1,8 +1,11 @@
-"""Parse /order command text — Title — Artist (em dash separator)."""
+"""Parse /order command text — Title — Artist (dash separator)."""
 
 from __future__ import annotations
 
-ORDER_SEPARATOR = "—"
+import re
+
+# Em dash, en dash, or ASCII hyphen surrounded by optional whitespace.
+ORDER_SEPARATOR_PATTERN = re.compile(r"\s*[—–-]\s*")
 
 
 def parse_order_args(args: list[str]) -> tuple[str, str] | None:
@@ -11,12 +14,11 @@ def parse_order_args(args: list[str]) -> tuple[str, str] | None:
         return None
 
     text = " ".join(args).strip()
-    if ORDER_SEPARATOR not in text:
+    parts = ORDER_SEPARATOR_PATTERN.split(text, maxsplit=1)
+    if len(parts) != 2:
         return None
 
-    title, artist = text.split(ORDER_SEPARATOR, 1)
-    title = title.strip()
-    artist = artist.strip()
+    title, artist = parts[0].strip(), parts[1].strip()
     if not title or not artist:
         return None
     return title, artist

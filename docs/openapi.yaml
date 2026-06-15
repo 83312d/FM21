@@ -6,7 +6,8 @@ info:
     Phase 1 public listener-facing HTTP API exposed via the gateway.
 
     Geo endpoints implement [Listener Contract §8](docs/contracts/listener-contract.md#8-geo-api-responses).
-    Now-playing reads `fm21:current:{cityTag}` per [Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model).
+    Now-playing reads `fm21:current:{cityTag}`; queue preview reads `fm21:queue:{cityTag}`
+    per [Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model).
 
     **Not in this spec:** `POST /internal/enqueue` is internal-only ([Broadcast Semantics §8](docs/contracts/broadcast-semantics.md#8-internal-enqueue-api)) — not exposed on the public gateway.
 
@@ -20,7 +21,9 @@ tags:
   - name: geo
     description: City detection for the web player ([Listener Contract §3](docs/contracts/listener-contract.md#3-city-detection-order-r1))
   - name: metadata
-    description: Now-playing metadata polled independently of the ICY stream ([Listener Contract §6](docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3))
+    description: |
+      Now-playing and shared broadcast queue preview, polled independently of the ICY stream
+      ([Listener Contract §6](docs/contracts/listener-contract.md#6-now-playing-r14-ktd-3)).
   - name: health
     description: Liveness probe for the gateway stack
 
@@ -141,6 +144,7 @@ paths:
                     content_type: music
                     started_at: "2026-06-08T18:30:00Z"
                     duration_sec: 240
+                    remaining_sec: 198
                 ad:
                   summary: Geo-targeted voice ad
                   value:
@@ -149,6 +153,7 @@ paths:
                     content_type: ad
                     started_at: "2026-06-08T18:34:12Z"
                     duration_sec: 42
+                    remaining_sec: 31
                 news:
                   summary: News pair (Phase 2+)
                   value:
@@ -157,6 +162,67 @@ paths:
                     content_type: news
                     started_at: "2026-06-08T19:00:05Z"
                     duration_sec: 90
+                    remaining_sec: 72
+        "404":
+          description: Unknown city or nothing currently on air
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unknownCity:
+                  summary: cityTag not in cities.yaml
+                  value:
+                    error: unknown_city
+                    message: cityTag is not an active broadcast city
+                notPlaying:
+                  summary: No current block in Redis
+                  value:
+                    error: not_playing
+                    message: no current block for moscow
+
+  /api/queue/{cityTag}:
+    get:
+      operationId: getQueuePreview
+      tags: [metadata]
+      summary: Next pending broadcast items for a city
+      description: |
+        Returns up to five pending queue items in playback order for the city's shared
+        broadcast timeline. Items are sorted by broadcast priority
+        (`AD` > `NEWS_PAIR` > `MUSIC_ORDER` > `MUSIC`), FIFO within the same priority
+        ([Broadcast Semantics §4](docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order)).
+
+        Listener-facing fields only — no queue item IDs, URIs, or internal priorities.
+      parameters:
+        - $ref: "#/components/parameters/cityTag"
+      responses:
+        "200":
+          description: Queue preview for the city (may be empty)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuePreviewResponse"
+              examples:
+                mixed:
+                  summary: Ads and music pending
+                  value:
+                    city_tag: moscow
+                    items:
+                      - title: Voice ad
+                        content_type: ad
+                        duration_sec: 42
+                      - title: IT news headline
+                        content_type: news
+                        duration_sec: 94
+                      - title: Ordered track
+                        artist: Example Artist
+                        content_type: music
+                        duration_sec: 210
+                empty:
+                  summary: No pending Redis items
+                  value:
+                    city_tag: spb
+                    items: []
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -209,8 +275,8 @@ components:
       in: path
       required: true
       description: |
-        Active broadcast city slug. Phase 1 values are defined in
-        `broadcast/liquidsoap/cities.yaml` (`moscow`, `spb`).
+        Active broadcast city slug from `broadcast/liquidsoap/cities.yaml`
+        (e.g. `moscow`, `spb`, `ekb`).
       schema:
         $ref: "#/components/schemas/CityTag"
       example: moscow
@@ -220,14 +286,16 @@ components:
       type: string
       description: |
         Canonical city slug from `broadcast/liquidsoap/cities.yaml`.
-        Phase 1 active cities: `moscow`, `spb`. Enum MUST stay in sync with that
-        file until a later unit generates the schema from the canonical list.
+        Active cities from `broadcast/liquidsoap/cities.yaml`. Enum MUST stay in
+        sync with that file until a later unit generates the schema from the canonical list.
       enum:
         - moscow
         - spb
+        - ekb
       examples:
         - moscow
         - spb
+        - ekb
 
     GeoSource:
       type: string
@@ -271,7 +339,7 @@ components:
 
     NowPlayingResponse:
       type: object
-      required: [city_tag, title, content_type, started_at, duration_sec]
+      required: [city_tag, title, content_type, started_at, duration_sec, remaining_sec]
       description: |
         Current on-air block exposed to listeners. Sourced from Redis
         `fm21:current:{cityTag}` ([Broadcast Semantics §7](docs/contracts/broadcast-semantics.md#7-redis-data-model)).
@@ -299,6 +367,44 @@ components:
           type: integer
           minimum: 1
           description: Total duration of the current block in seconds
+        remaining_sec:
+          type: integer
+          minimum: 0
+          description: Seconds remaining in the current block (0 when the block has ended)
+
+    QueueItemPreview:
+      type: object
+      required: [title, content_type, duration_sec]
+      description: |
+        Listener-facing pending queue item. Maps broadcast queue `type` to `content_type`
+        the same way as now-playing.
+      properties:
+        title:
+          type: string
+          description: Display title for the pending block
+        artist:
+          type: string
+          description: Artist name when applicable (music blocks)
+        content_type:
+          $ref: "#/components/schemas/ContentType"
+        duration_sec:
+          type: integer
+          minimum: 1
+          description: Estimated block duration in seconds
+
+    QueuePreviewResponse:
+      type: object
+      required: [city_tag, items]
+      description: |
+        Up to five pending items from `fm21:queue:{cityTag}` in playback order.
+      properties:
+        city_tag:
+          $ref: "#/components/schemas/CityTag"
+        items:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/QueueItemPreview"
 
     HealthResponse:
       type: object
@@ -342,8 +448,8 @@ components:
 
     NotFound:
       description: |
-        Unknown or inactive `cityTag` on `/api/now-playing/{cityTag}`
-        (not listed in `broadcast/liquidsoap/cities.yaml`).
+        Unknown or inactive `cityTag` on `/api/now-playing/{cityTag}` or
+        `/api/queue/{cityTag}` (not listed in `broadcast/liquidsoap/cities.yaml`).
       content:
         application/json:
           schema:

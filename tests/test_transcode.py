@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.bot.transcode import TranscodeError, ffmpeg_available, transcode_ogg_to_mp3
+from services.ads.transcode import TranscodeError, ffmpeg_available, transcode_ogg_to_mp3
 
 
 @pytest.fixture
@@ -69,13 +69,13 @@ def test_transcode_ogg_to_mp3(sample_ogg: Path, tmp_path: Path):
 
 
 def test_transcode_missing_ffmpeg_raises(tmp_path: Path):
-    with patch("services.bot.transcode.ffmpeg_available", return_value=False):
+    with patch("services.ads.transcode.ffmpeg_available", return_value=False):
         with pytest.raises(TranscodeError, match="ffmpeg not found"):
             transcode_ogg_to_mp3(tmp_path / "in.ogg", tmp_path / "out.mp3")
 
 
 def test_transcode_failure_raises(sample_ogg: Path, tmp_path: Path):
-    with patch("services.bot.transcode.subprocess.run") as mock_run:
+    with patch("services.ads.transcode.subprocess.run") as mock_run:
         mock_run.side_effect = subprocess.CalledProcessError(
             returncode=1,
             cmd=["ffmpeg"],

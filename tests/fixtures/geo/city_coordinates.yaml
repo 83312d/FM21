@@ -12,6 +12,12 @@ spb:
   city_tag: spb
   city_name: Санкт-Петербург
 
+ekb:
+  lat: 56.8389
+  lon: 60.6057
+  city_tag: ekb
+  city_name: Екатеринбург
+
 # Midpoint between cities — still resolves to nearest broadcast city.
 between:
   lat: 57.5
