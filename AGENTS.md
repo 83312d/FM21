@@ -7,6 +7,7 @@ Read this file first. Do not re-derive product behavior from `docs/tz.md` (legac
 | Order | Document | Purpose |
 |-------|----------|---------|
 | 1 | [STRATEGY.md](STRATEGY.md) | Problem, approach, metrics, delivery tracks |
+| 1b | [docs/architecture.md](docs/architecture.md) | Containers, services, queues, flow diagrams |
 | 2 | [docs/brainstorms/2026-06-08-fm21-requirements.md](docs/brainstorms/2026-06-08-fm21-requirements.md) | Requirements R1–R39, acceptance examples AE1–AE6 |
 | 3 | `docs/contracts/` | Broadcast, listener, operator behavior (**U2**) |
 | 4 | `docs/adr/` | ADR-001 delivery, ADR-002 licensing, [ADR-003 containers](docs/adr/003-container-strategy.md) |

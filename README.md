@@ -2,7 +2,9 @@
 
 Geotargeted internet radio: one synchronous live stream per city (Moscow, Saint Petersburg, …), continuous music and news, city-targeted voice ads from Telegram. Listeners use an open web player; no account required.
 
-**Stack (Phase 1):** Liquidsoap + Icecast broadcast spine, Redis enqueue bus, Python glue services, static HTML player with ICY playback. **Monorepo; all services run in Docker** (ADR-003).
+**Stack:** Liquidsoap + Icecast broadcast spine, Redis enqueue bus, Python glue services (geo, metadata, bot, ads, news, music), static HTML player with ICY playback. **Monorepo; all services run in Docker** (ADR-003).
+
+**Architecture:** [docs/architecture.md](docs/architecture.md) — service map, diagrams, data flows.
 
 ## Prerequisites
 

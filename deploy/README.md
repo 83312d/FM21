@@ -2,6 +2,8 @@
 
 Production manifests live under `deploy/production/` (U30+). **Local development** uses root `docker-compose.yml` (ADR-003) — do not use the prod compose file for day-to-day dev.
 
+System overview (all services, diagrams): [docs/architecture.md](../docs/architecture.md).
+
 ## Local-only production quickstart (pet project)
 
 This stack runs on a single machine with Docker. Gateway listens on **HTTP** at `127.0.0.1:8080` (no TLS). Telegram bot defaults to **long polling** (`BOT_MODE=polling`) so no public HTTPS or ngrok is required.

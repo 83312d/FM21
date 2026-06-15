@@ -14,6 +14,11 @@ __pycache__/
 # Runtime-generated ads (voice transcodes)
 data/ads/*
 
+# Runtime-generated news audio (TTS output + Redis-backed cache by content hash)
+data/news/cache/
+data/news/*.mp3
+!data/news/news-stinger.mp3
+
 # Corporate trust anchors (local only — org policy; never commit)
 certs/ca-certificates-21/
 
