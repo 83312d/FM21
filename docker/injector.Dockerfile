@@ -13,6 +13,7 @@ WORKDIR /app
 COPY requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
+COPY services/common/ /app/services/common/
 COPY services/injector/ /app/services/injector/
 COPY broadcast/liquidsoap/cities.yaml /broadcast/liquidsoap/cities.yaml
 

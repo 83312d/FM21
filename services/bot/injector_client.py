@@ -4,5 +4,4 @@ from services.bot.clients.injector_client import (  # noqa: F401
     EnqueueFailure,
     EnqueueResult,
     enqueue_music_order,
-    enqueue_voice_ad,
 )

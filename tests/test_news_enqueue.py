@@ -302,6 +302,7 @@ def test_injector_accepts_news_pair_all_fanout(
     injector_client,
     auth_headers,
     queue_client: QueueClient,
+    active_cities: list[str],
 ):
     payload = {
         "type": "NEWS_PAIR",
@@ -316,9 +317,9 @@ def test_injector_accepts_news_pair_all_fanout(
     response = injector_client.post("/internal/enqueue", json=payload, headers=auth_headers)
     assert response.status_code == 201
     body = response.json()
-    assert set(body["city_tags"]) == {"moscow", "spb"}
+    assert set(body["city_tags"]) == set(active_cities)
 
-    for city in ("moscow", "spb"):
+    for city in active_cities:
         items = queue_client.list_items(city)
         assert len(items) == 1
         assert items[0]["type"] == "NEWS_PAIR"

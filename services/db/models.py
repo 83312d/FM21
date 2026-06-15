@@ -116,3 +116,13 @@ class BroadcastLog(Base):
     item_type: Mapped[str] = mapped_column(String(32), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OperatorPrefs(Base):
+    __tablename__ = "operator_prefs"
+
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    default_city_tag: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

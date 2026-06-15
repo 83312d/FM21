@@ -78,6 +78,7 @@ def test_format_status_message():
     now = datetime(2026, 6, 11, 10, 14, 0, tzinfo=UTC)
     text = format_status_message(city_tag="moscow", now=now)
     assert "Москва" in text
+    assert "Следующие новости" in text
     assert "10:15 UTC" in text
     assert "1 мин" in text
 
@@ -85,10 +86,11 @@ def test_format_status_message():
 @pytest.mark.asyncio
 async def test_status_command_replies_with_next_news_at(monkeypatch):
     fixed_now = datetime(2026, 6, 11, 10, 29, 0, tzinfo=UTC)
-    monkeypatch.setattr(
-        "services.bot.handlers.status.format_status_message",
-        lambda *, city_tag, now=None: format_status_message(city_tag=city_tag, now=fixed_now),
-    )
+
+    async def _fake_fetch(city_tag: str) -> str:
+        return format_status_message(city_tag=city_tag, now=fixed_now)
+
+    monkeypatch.setattr("services.bot.handlers.status.fetch_status", _fake_fetch)
 
     message = MagicMock(spec=Message)
     message.reply_text = AsyncMock()

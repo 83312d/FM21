@@ -9,12 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from services.injector.fanout import load_active_cities
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NGINX_GATEWAY_CONF = REPO_ROOT / "docker/nginx-gateway.conf"
 FM21_LIQ = REPO_ROOT / "broadcast/liquidsoap/fm21.liq"
 LIQUIDSOAP_CHECK_SCRIPT = REPO_ROOT / "scripts/liquidsoap_check.sh"
+CITIES_YAML = REPO_ROOT / "broadcast/liquidsoap/cities.yaml"
 
-MOUNT_CITIES = ("moscow", "spb")
+MOUNT_CITIES = tuple(load_active_cities(str(CITIES_YAML)))
 
 
 @pytest.fixture

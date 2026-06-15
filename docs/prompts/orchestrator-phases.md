@@ -59,7 +59,12 @@ bash scripts/verify_acceptance.sh --phase 3 --allow-manual
 Вставляй этот блок в начало каждого orchestrator prompt (или держи в голове):
 
 ```text
-ROLE: Orchestrator only. Do NOT implement units inline except one-line fixes after review.
+ROLE: Orchestrator only — coordinator, NOT implementer.
+
+FORBIDDEN: writing/editing implementation files (services/, broadcast/, tests/, docker/) yourself.
+ALLOWED inline: one-line fixes after /ce-code-review; running verify/gate commands; updating session status table.
+
+Every code unit (U4+): MUST dispatch Task subagent with Worker prompt from §Workers BEFORE any implementation exists in the branch for that unit. If you already edited files for Ux — stop, revert or hand off to a worker, do not continue inline.
 
 MANDATORY per unit (Definition of done — RED → GREEN → VERIFY → LAYER → REVIEW):
 1. Read plan unit (Goal, Files, Approach, Test scenarios, Verification) — plan 002; U4–U8 detail in plan 001.
@@ -83,7 +88,8 @@ Phase exit (orchestrator mandatory before merge/demo):
 - Phase NOT complete if gateway /moscow or /spb ≠ 200 or liquidsoap --check fails.
 
 Subagent rules:
-- Code units: prefer Task subagents; parallelize only when plan Files: have zero intersection.
+- Code units: Task subagent is MANDATORY (serial by default); parallelize only when plan Files: have zero intersection.
+- Orchestrator session that implements U24–U29 (or any U4+) without Task dispatch is a workflow violation — reject and restart unit with worker.
 - After each unit: short status table (U-ID | pass/fail | tests | review).
 - Stop phase and report blockers (missing secrets, ADR not approved) — do not invent product behavior.
 
@@ -248,6 +254,8 @@ ORCHESTRATOR — FM21 Phase 4 (U24–U29).
 Git branch: feat/phase-4-bot-ops
 
 Plan: docs/plans/2026-06-08-002-feat-fm21-full-product-plan.md units U24–U29
+
+SUBAGENTS MANDATORY: one Task worker per unit (prompts § Phase 4 workers). You coordinate only — no inline implementation of U24–U29. Loop: dispatch worker → verify RED/GREEN → gates → /ce-code-review → next unit.
 
 Note: Refactors Phase 1 U8 voice path → ads service. Keep AE1 passing throughout.
 

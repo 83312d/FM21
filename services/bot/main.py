@@ -1,25 +1,32 @@
-"""FM21 Telegram bot — webhook control plane for operator voice ads."""
+"""FM21 Telegram bot — webhook (prod) or long polling (local dev)."""
 
 from __future__ import annotations
 
 import logging
 import os
+import traceback
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from telegram import Update
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    TypeHandler,
     filters,
 )
 
+from services.bot.middleware.auth import auth_middleware
+from services.common.security import secrets_match
+
 from services.bot.handlers.city import ad_city_callback, city_command
 from services.bot.handlers.order import order_callback, order_command
+from services.bot.handlers.playlist import playlist_command
 from services.bot.handlers.status import status_command
 from services.bot.handlers.voice import voice_message
 
@@ -28,33 +35,72 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 TELEGRAM_WEBHOOK_URL = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
+BOT_OPEN_ACCESS = os.environ.get("BOT_OPEN_ACCESS", "").strip() == "1"
+BOT_MODE = os.environ.get("BOT_MODE", "webhook").strip().lower()
 
 bot_application: Application | None = None
 
 
-async def coming_soon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text("Скоро")
+def use_polling() -> bool:
+    """Long polling for local dev — no public HTTPS / ngrok required."""
+    return BOT_MODE == "polling"
 
 
-def build_application() -> Application:
+def _telegram_proxy_url() -> str | None:
+    for key in ("TELEGRAM_PROXY_URL", "HTTPS_PROXY", "HTTP_PROXY"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return None
+
+
+def _telegram_request() -> HTTPXRequest:
+    kwargs: dict[str, object] = {
+        "connection_pool_size": 20,
+        "connect_timeout": 30.0,
+        "read_timeout": 30.0,
+        "write_timeout": 30.0,
+        "pool_timeout": 30.0,
+    }
+    proxy = _telegram_proxy_url()
+    if proxy:
+        kwargs["proxy"] = proxy
+    return HTTPXRequest(**kwargs)
+
+
+async def _log_handler_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    exc = context.error
+    update_id = update.update_id if isinstance(update, Update) else "?"
+    exc_type = type(exc).__name__ if exc is not None else "Unknown"
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)) if exc else ""
+    logger.error(
+        "telegram handler error update_id=%s exc_type=%s\n%s",
+        update_id,
+        exc_type,
+        tb,
+    )
+
+
+def build_application(*, polling: bool) -> Application:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
 
-    application = (
-        Application.builder()
-        .token(TELEGRAM_BOT_TOKEN)
-        .updater(None)
-        .build()
-    )
+    builder = Application.builder().token(TELEGRAM_BOT_TOKEN).request(_telegram_request())
+    if not polling:
+        builder = builder.updater(None)
+    application = builder.build()
+
+    application.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
     application.add_handler(CommandHandler("city", city_command))
     application.add_handler(CommandHandler("order", order_command))
     application.add_handler(CommandHandler("status", status_command))
-    application.add_handler(CommandHandler("playlist", coming_soon))
+    application.add_handler(CommandHandler("playlist", playlist_command))
     application.add_handler(MessageHandler(filters.VOICE, voice_message))
     application.add_handler(CallbackQueryHandler(ad_city_callback, pattern=r"^ad:"))
     application.add_handler(CallbackQueryHandler(order_callback, pattern=r"^order:"))
+
+    application.add_error_handler(_log_handler_error)
 
     return application
 
@@ -62,11 +108,21 @@ def build_application() -> Application:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global bot_application
-    bot_application = build_application()
+    polling = use_polling()
+    bot_application = build_application(polling=polling)
     await bot_application.initialize()
     await bot_application.start()
 
-    if TELEGRAM_WEBHOOK_URL:
+    if polling:
+        await bot_application.bot.delete_webhook(drop_pending_updates=True)
+        if bot_application.updater is None:
+            raise RuntimeError("polling mode requires Application updater")
+        await bot_application.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+        )
+        logger.info("telegram long polling started (BOT_MODE=polling, local dev)")
+    elif TELEGRAM_WEBHOOK_URL:
         webhook_target = f"{TELEGRAM_WEBHOOK_URL.rstrip('/')}/api/bot/webhook"
         await bot_application.bot.set_webhook(
             url=webhook_target,
@@ -75,10 +131,15 @@ async def lifespan(app: FastAPI):
         )
         logger.info("telegram webhook registered at %s", webhook_target)
     else:
-        logger.warning("TELEGRAM_WEBHOOK_URL not set — webhook not registered with Telegram")
+        logger.warning(
+            "TELEGRAM_WEBHOOK_URL not set and BOT_MODE is not polling — "
+            "bot will not receive Telegram updates"
+        )
 
     yield
 
+    if bot_application.updater is not None and bot_application.updater.running:
+        await bot_application.updater.stop()
     await bot_application.stop()
     await bot_application.shutdown()
     bot_application = None
@@ -91,8 +152,13 @@ def _validate_webhook_secret(
     x_telegram_bot_api_secret_token: str | None,
 ) -> None:
     if not TELEGRAM_WEBHOOK_SECRET:
-        return
-    if x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET:
+        if BOT_OPEN_ACCESS:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="TELEGRAM_WEBHOOK_SECRET not configured",
+        )
+    if not secrets_match(x_telegram_bot_api_secret_token, TELEGRAM_WEBHOOK_SECRET):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid or missing webhook secret",

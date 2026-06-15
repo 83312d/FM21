@@ -5,36 +5,10 @@ from __future__ import annotations
 import math
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
-
-# WGS-84 centroids for Phase 1 reverse geocoding (nearest-city).
-CITY_LOCATIONS: dict[str, tuple[float, float]] = {
-    "moscow": (55.7558, 37.6173),
-    "spb": (59.9343, 30.3351),
-}
-
-# Badge display names (Listener Contract §3, OpenAPI GeoCityResponse examples).
-DISPLAY_NAMES: dict[str, str] = {
-    "moscow": "Москва",
-    "spb": "Санкт-Петербург",
-}
-
-# GeoIP / reverse lookup aliases → city_tag.
-NAME_ALIASES: dict[str, tuple[str, ...]] = {
-    "moscow": ("moscow", "москва"),
-    "spb": (
-        "saint petersburg",
-        "st petersburg",
-        "st. petersburg",
-        "sankt-peterburg",
-        "sankt peterburg",
-        "санкт-петербург",
-        "spb",
-    ),
-}
 
 
 def _normalize_name(value: str) -> str:
@@ -45,10 +19,10 @@ def _normalize_name(value: str) -> str:
 class City:
     tag: str
     name: str
-
-    @property
-    def display_name(self) -> str:
-        return DISPLAY_NAMES.get(self.tag, self.name)
+    display_name: str = ""
+    lat: float | None = None
+    lon: float | None = None
+    aliases: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -74,21 +48,19 @@ class CityRegistry:
                 return city.tag
             if _normalize_name(city.display_name) == normalized:
                 return city.tag
-        for tag, aliases in NAME_ALIASES.items():
-            if tag not in self.cities:
-                continue
-            if normalized in {_normalize_name(alias) for alias in aliases}:
-                return tag
+            if normalized in {_normalize_name(alias) for alias in city.aliases}:
+                return city.tag
+            if normalized == _normalize_name(city.tag):
+                return city.tag
         return None
 
     def nearest_tag(self, lat: float, lon: float) -> str | None:
         best_tag: str | None = None
         best_distance = float("inf")
-        for tag in self.cities:
-            location = CITY_LOCATIONS.get(tag)
-            if location is None:
+        for tag, city in self.cities.items():
+            if city.lat is None or city.lon is None:
                 continue
-            distance = _haversine_km(lat, lon, location[0], location[1])
+            distance = _haversine_km(lat, lon, city.lat, city.lon)
             if distance < best_distance:
                 best_distance = distance
                 best_tag = tag
@@ -105,6 +77,18 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
     )
     return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _parse_city_entry(entry: dict) -> City:
+    aliases = entry.get("aliases") or []
+    return City(
+        tag=entry["tag"],
+        name=entry["name"],
+        display_name=entry.get("display_name") or entry["name"],
+        lat=entry.get("lat"),
+        lon=entry.get("lon"),
+        aliases=tuple(str(alias) for alias in aliases),
+    )
 
 
 def resolve_cities_path() -> Path:
@@ -126,8 +110,17 @@ def load_registry(
         payload = yaml.safe_load(handle) or {}
     cities: dict[str, City] = {}
     for entry in payload.get("cities", []):
-        tag = entry["tag"]
-        cities[tag] = City(tag=tag, name=entry["name"])
+        city = _parse_city_entry(entry)
+        cities[city.tag] = city
     if default not in cities:
         raise ValueError(f"DEFAULT_CITY_TAG {default!r} is not listed in {path}")
     return CityRegistry(cities=cities, default_tag=default)
+
+
+def display_names_map(*, cities_path: Path | None = None) -> dict[str, str]:
+    registry = load_registry(cities_path=cities_path)
+    return {tag: (city.display_name or city.name) for tag, city in registry.cities.items()}
+
+
+# Back-compat for bot handlers — populated from cities.yaml at import.
+DISPLAY_NAMES: dict[str, str] = display_names_map()

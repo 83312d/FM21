@@ -88,4 +88,17 @@
         <subtype>mp3</subtype>
         <burst-size>65536</burst-size>
     </mount>
+
+    <mount type="normal">
+        <mount-name>/ekb</mount-name>
+        <public>1</public>
+        <stream-name>FM21 Yekaterinburg</stream-name>
+        <stream-description>FM21 city stream — Yekaterinburg</stream-description>
+        <stream-url>http://localhost:8000/ekb</stream-url>
+        <genre>Radio</genre>
+        <bitrate>128</bitrate>
+        <type>audio/mpeg</type>
+        <subtype>mp3</subtype>
+        <burst-size>65536</burst-size>
+    </mount>
 </icecast>

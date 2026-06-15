@@ -56,25 +56,6 @@ async def _post_enqueue(payload: dict) -> EnqueueResult | EnqueueFailure:
     )
 
 
-async def enqueue_voice_ad(
-    *,
-    uri: str,
-    city_tag: str,
-    duration_sec: int,
-) -> EnqueueResult | EnqueueFailure:
-    payload = {
-        "type": "AD",
-        "uri": uri,
-        "city_tag": city_tag,
-        "meta": {
-            "title": "Voice ad",
-            "artist": "",
-            "duration_sec": duration_sec,
-        },
-    }
-    return await _post_enqueue(payload)
-
-
 async def enqueue_music_order(
     *,
     uri: str,

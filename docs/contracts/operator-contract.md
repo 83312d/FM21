@@ -61,8 +61,8 @@ Default applies to:
 4. Operator taps confirmation
 5. Bot replies «Обрабатываю…» (processing) — transcode may take several seconds
 6. Bot transcodes: OGG → MP3 128kbps, EBU R128 loudness normalization (ffmpeg in container)
-7. Bot saves to data/ads/{id}.mp3
-8. Bot POST /internal/enqueue { type: AD, uri, city_tag, meta } with `X-FM21-Internal-Token`
+7. Ads service transcodes OGG → MP3 128kbps (EBU R128), saves to `data/ads/{id}.mp3`
+8. Bot POST `ADS_URL/internal/ads/submit` (multipart: `audio`, `telegram_user_id`, `city_tag`, `duration_sec`) with `X-FM21-Internal-Token`; ads service enqueues via injector
 9. Bot replies success with city name(s) or error (queue full, etc.)
 ```
 
@@ -96,22 +96,22 @@ If ffmpeg missing or fails: reply «Не удалось обработать а�
 | Voice message | §4 flow |
 | `/city <tag>` | §3 |
 | `/city all` | §3 |
-| `/order …` | Reply: «Скоро» / coming soon |
-| `/status` | Reply: «Скоро» |
-| `/playlist …` | Reply: «Скоро» (admin check deferred) |
+| `/order …` | Reply: «Скоро» / coming soon *(superseded in Phase 2+ — see below)* |
+| `/status` | Reply: «Скоро» *(superseded in Phase 2+ — see below)* |
+| `/playlist …` | Reply: «Скоро» *(superseded in Phase 4 — see below)* |
 
 ### Phase 2+ (music)
 
 | Command | Behavior |
 |---------|----------|
 | `/order <title> — <artist>` | Search Yandex via `MusicProvider` → show match → confirm → enqueue `MUSIC_ORDER` for operator default city |
-| `/status` | Current track, queue preview (next 5), time until next news for operator's city |
+| `/status` | Current track, queue preview (next 5), time until next news for operator's city — via metadata API (`GET /api/now-playing/{cityTag}`, `GET /api/queue/{cityTag}`) |
 
-### Phase 2+ (admin)
+### Phase 4+ (admin)
 
 | Command | Behavior |
 |---------|----------|
-| `/playlist <name>` | Admin only (`TELEGRAM_ADMIN_IDS`) — update `playlist_rules.yaml` / Redis rules for city |
+| `/playlist <uid:kind>` | Admin only (`TELEGRAM_ADMIN_IDS`) — upsert `playlist_config` for operator default city with `yandex_playlist_ids: [<uid:kind>]` |
 
 ---
 

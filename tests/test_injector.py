@@ -90,23 +90,24 @@ def test_ad_count_ignores_non_ad_items(injector_client, auth_headers, ad_payload
     assert queue_client.count_pending_ads("moscow") == 5
 
 
-def test_all_fanout_both_cities(injector_client, auth_headers, ad_payload, queue_client):
+def test_all_fanout_both_cities(
+    injector_client, auth_headers, ad_payload, queue_client, active_cities: list[str]
+):
     payload = {**ad_payload, "city_tag": "all"}
     body = _enqueue(injector_client, auth_headers, payload)
 
-    assert set(body["city_tags"]) == {"moscow", "spb"}
-    assert len(body["ids"]) == 2
-    assert body["ids"][0] != body["ids"][1]
+    assert set(body["city_tags"]) == set(active_cities)
+    assert len(body["ids"]) == len(active_cities)
+    assert len(set(body["ids"])) == len(active_cities)
 
-    moscow_items = queue_client.list_items("moscow")
-    spb_items = queue_client.list_items("spb")
-    assert len(moscow_items) == 1
-    assert len(spb_items) == 1
-    assert moscow_items[0]["uri"] == spb_items[0]["uri"]
-    assert moscow_items[0]["meta"] == spb_items[0]["meta"]
-    assert moscow_items[0]["id"] != spb_items[0]["id"]
-    assert moscow_items[0]["city_tag"] == "moscow"
-    assert spb_items[0]["city_tag"] == "spb"
+    items_by_city = {city: queue_client.list_items(city) for city in active_cities}
+    for city, items in items_by_city.items():
+        assert len(items) == 1
+        assert items[0]["city_tag"] == city
+    uris = {items[0]["uri"] for items in items_by_city.values()}
+    metas = {tuple(items[0]["meta"].items()) for items in items_by_city.values()}
+    assert len(uris) == 1
+    assert len(metas) == 1
 
 
 def test_all_fanout_rejects_when_any_city_full(injector_client, auth_headers, ad_payload, queue_client):
