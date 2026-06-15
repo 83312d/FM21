@@ -10,10 +10,13 @@ import redis
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from services.common.logging import configure_json_logging
 from services.geo.cities import CityRegistry, load_registry
+from services.metadata.health import deep_status, public_status
 from services.metadata.now_playing import read_now_playing
 from services.metadata.queue_reader import read_queue_preview
 
+configure_json_logging(service="metadata")
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +36,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FM21 Metadata API", version="0.1.0", lifespan=lifespan)
+
+
+@app.get("/api/health")
+def api_health():
+    """Public liveness — status only (ok/degraded); no dependency topology."""
+    body, status_code = public_status(app.state.redis)
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@app.get("/internal/health")
+async def internal_health():
+    """Deep health for operators — not exposed on the public gateway."""
+    body, status_code = await deep_status(app.state.redis)
+    return JSONResponse(content=body, status_code=status_code)
 
 
 @app.get("/api/now-playing/{city_tag}")

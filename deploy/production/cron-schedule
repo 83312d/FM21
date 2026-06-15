@@ -1,0 +1,8 @@
+# FM21 production cron schedule (U32, TZ §9) — UTC wall clock (ADR-010).
+# Equivalent to services.cron.scheduler when run via system crond.
+#
+# playlist-refresh (0 * * * *) is delegated to music-worker — continuous buffer fill
+# every MUSIC_BUFFER_POLL_INTERVAL_SEC (default 15s); no separate hourly job needed.
+
+0 0 * * * root cd /app && python -m services.cron.news_cache_reset --once
+0 3 * * * root cd /app && python -m services.cron.cleanup_tracks --once && python -m services.cron.cleanup_ads --once

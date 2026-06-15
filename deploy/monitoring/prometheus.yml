@@ -1,0 +1,22 @@
+# FM21 Prometheus scrape config (U31 stub — local pet project).
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: fm21-gateway
+    metrics_path: /api/health
+    static_configs:
+      - targets: ["gateway:80"]
+        labels:
+          role: gateway
+
+  - job_name: fm21-metadata-internal
+    metrics_path: /internal/health
+    static_configs:
+      - targets: ["metadata:8080"]
+        labels:
+          role: metadata

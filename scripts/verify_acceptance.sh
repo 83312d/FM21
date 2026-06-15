@@ -346,13 +346,21 @@ else
 fi
 
 # Gate D — e2e (when phase lists e2e bindings)
-# Always run stream-playback (gateway ICY smoke). geo-isolation runs without AE6 (60s flake).
+# Phase 5 adds full-product smoke; geo-isolation runs without AE6 (60s flake).
 if [[ -n "${E2E_TARGETS:-}" ]]; then
   echo ""
-  echo "e2e bindings: ${E2E_TARGETS:-} (+ stream-playback gate)"
-  run_gate "D — e2e" docker compose --profile e2e run --rm e2e \
-    npx vitest run tests/e2e/stream-playback.spec.ts tests/e2e/geo-isolation.spec.ts \
-    -t "moscow|spb|AE4|happy path|AE-CITY|geo isolation|AE-NOW-PLAYING"
+  if [[ "$PHASE" == "5" ]]; then
+    echo "e2e bindings: ${E2E_TARGETS:-} (+ stream-playback + full-product smoke)"
+    run_gate "D — e2e" docker compose --profile e2e run --rm e2e \
+      npx vitest run tests/e2e/full-product.spec.ts tests/e2e/stream-playback.spec.ts \
+        tests/e2e/geo-isolation.spec.ts \
+      -t "health|geo|web client|sync radio|mounts|moscow|spb|AE4|happy path|AE-CITY|geo isolation|AE-NOW-PLAYING"
+  else
+    echo "e2e bindings: ${E2E_TARGETS:-} (+ stream-playback gate)"
+    run_gate "D — e2e" docker compose --profile e2e run --rm e2e \
+      npx vitest run tests/e2e/stream-playback.spec.ts tests/e2e/geo-isolation.spec.ts \
+      -t "moscow|spb|AE4|happy path|AE-CITY|geo isolation|AE-NOW-PLAYING"
+  fi
 else
   echo ""
   echo "==> Gate: D — e2e"

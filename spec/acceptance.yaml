@@ -1,15 +1,18 @@
 # FM21 acceptance traceability spec — machine-parseable criteria for agents and CI.
-# Verification runners bind to pytest/e2e targets in U4–U8; Phase 2+ entries are deferred.
+# Phase 5 (U34): full TZ §12 traceability; AE1–AE9 with automated bindings where feasible locally.
 
 version: "1.0.0"
 source_docs:
   - docs/brainstorms/2026-06-08-fm21-requirements.md
+  - docs/brainstorms/2026-06-08-fm21-full-product-requirements.md
   - docs/plans/2026-06-08-001-feat-fm21-greenfield-plan.md
+  - docs/plans/2026-06-08-002-feat-fm21-full-product-plan.md
   - docs/contracts/broadcast-semantics.md
   - docs/contracts/listener-contract.md
   - docs/contracts/operator-contract.md
   - docs/openapi.yaml
-last_updated: "2026-06-11"
+  - docs/tz.md
+last_updated: "2026-06-15"
 
 acceptance:
 
@@ -136,8 +139,8 @@ acceptance:
     covers: []
     covers_decision: synchronous-radio
     phase: 2
-    deferred: true
-    note: Requirements AE5 traces to Key Decision (sync radio), not a standalone R-ID. Full /order flow in U9.
+    deferred: false
+    note: Requirements AE5 traces to Key Decision (sync radio), not a standalone R-ID. /order + MUSIC_ORDER implemented in U14; timing scenario remains manual.
     given:
       - Ivan orders a song via bot on Moscow stream at 14:03
       - Song enqueues as MUSIC_ORDER and plays on shared Moscow timeline
@@ -149,13 +152,16 @@ acceptance:
       - Petya hears whatever is currently on air at 14:05 — not a rewind
       - Petya does not hear Ivan's order unless it is still queued or currently playing at connect time
       - Mid-block join is normal — late joiner enters mid-track if block still airing
+      - Player copy communicates live-edge sync radio (no personal replay)
     contract_refs:
       - docs/contracts/listener-contract.md#5-synchronous-radio-ux-fg3-ae5
       - docs/contracts/broadcast-semantics.md#2-city-isolation
     verification:
+      - pytest: tests/test_bot_order.py (MUSIC_ORDER enqueue on confirm)
+      - pytest: tests/test_dequeue_priority.py (MUSIC_ORDER priority 50)
+      - e2e: tests/e2e/full-product.spec.ts (sync radio tagline + live mount connect)
       - manual: staged order at T0; second listener connects at T+2min after track ends
-      - e2e: deferred — requires /order activation (U9)
-    units: [U7, U9]
+    units: [U7, U9, U14]
 
   - id: AE6
     title: Background tab playback continues without re-interaction
@@ -295,3 +301,180 @@ acceptance:
       - script: scripts/verify_acceptance.sh --phase 1 (gate C — gateway GET /moscow /spb)
       - manual: switch moscow → spb during playback; measure reconnect < 2s
     units: [U7]
+
+  - id: AE7
+    title: Full bot — voice, /order, /playlist, /city with confirmation
+    covers: [R18, R25, R26, R27, R28]
+    phase: 4
+    given:
+      - Operator is allowlisted for bot commands
+      - Music provider and ads/injector services are reachable
+    when:
+      - Operator sends voice message, /order, /playlist, or /city commands
+    then:
+      - Voice ad requires city confirmation before enqueue (U26)
+      - /order parses title — artist, searches, confirms, enqueues MUSIC_ORDER for operator city (U14)
+      - /playlist admin edits playlist rules with confirmation (U27)
+      - /city sets operator default city with keyboard confirmation (U25)
+      - Webhook mode validates TELEGRAM_WEBHOOK_SECRET; polling mode works without public HTTPS (U30)
+    contract_refs:
+      - docs/contracts/operator-contract.md#3-operator-city-context
+      - docs/contracts/operator-contract.md#4-voice-ad-flow-r18-r36
+      - docs/contracts/operator-contract.md#5-bot-commands-phase-2-music
+    verification:
+      - pytest: tests/test_bot_voice_flow.py
+      - pytest: tests/test_bot_order.py
+      - pytest: tests/test_bot_playlist.py
+      - pytest: tests/test_bot_city.py
+      - pytest: tests/test_bot_webhook.py
+      - pytest: tests/test_production_deploy.py (BOT_MODE polling default)
+      - manual: live Telegram voice → confirm → hear ad on correct mount
+    units: [U8, U14, U25, U26, U27, U30]
+
+  - id: AE8
+    title: Music fills air; playlist rules change without broadcast core edits
+    covers: [R10, R11, R28]
+    phase: 2
+    given:
+      - Music buffer worker maintains ≥10 MUSIC items per city
+      - playlist_rules.yaml defines city overrides and blocklists
+    when:
+      - Operator updates playlist rules via /playlist or YAML reload path
+      - Buffer worker refills queue from MusicProvider
+    then:
+      - MUSIC filler at priority 10 keeps air filled between higher-priority blocks
+      - Rule changes apply without editing Liquidsoap fm21.liq or injector fanout core
+      - Yandex provider resolves stream URLs; static fallback when OAuth absent
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
+      - docs/adr/002-music-licensing.md
+    verification:
+      - pytest: tests/test_playlist_rules.py
+      - pytest: tests/test_buffer_worker.py
+      - pytest: tests/test_yandex_provider.py
+      - pytest: tests/test_dequeue_priority.py (MUSIC priority 10)
+      - pytest: tests/test_broadcast_gates.py (liquidsoap compile — rules externalized)
+      - manual: change playlist_rules.yaml; confirm buffer picks new playlist IDs
+    units: [U10, U11, U12, U13, U14]
+
+  - id: AE9
+    title: News every 15 min with stinger; duration 1–2 min
+    covers: [R6, R7, R8, R12, R13]
+    phase: 3
+    given:
+      - UTC slot clock fires at :00/:15/:30/:45
+      - News item is ready with synthesized audio
+    when:
+      - Enqueue cron runs for current slot
+    then:
+      - NEWS_PAIR (stinger + news) enqueued at priority 80 for all active cities
+      - Stinger duration 3–5 sec; news segment 1–2 min
+      - Play cap ≤3/24h; cached audio reused on repeat (see AE3)
+      - Materialize cron runs T−2 min before slot
+    contract_refs:
+      - docs/contracts/broadcast-semantics.md#3-block-model
+      - docs/contracts/broadcast-semantics.md#4-priority-and-dequeue-order
+    verification:
+      - pytest: tests/test_news_materialize.py (slot clock T−2 min)
+      - pytest: tests/test_news_enqueue.py (NEWS_PAIR fan-out)
+      - pytest: tests/test_news_tts.py (stinger duration in range)
+      - pytest: tests/test_news_selection.py
+      - pytest: tests/test_broadcast_gates.py (NEWS_PAIR annotate contract)
+      - manual: listen through full 15-min slot cycle on dev stack
+    units: [U15, U16, U17, U18, U19, U20, U21, U22, U23]
+
+  - id: AE-PROD-OPS
+    title: Production deploy, health, cron, and gateway hardening
+    covers: [R38, R39]
+    phase: 5
+    given:
+      - deploy/production manifests exist for local-only pet project
+      - Dev stack exposes gateway :8080 with metadata health proxy
+    when:
+      - Operator runs phase 5 acceptance gates or prod smoke checklist
+    then:
+      - env.template lists required secrets; prod compose builds all services
+      - GET /api/health returns ok or degraded; internal health not exposed on prod gateway
+      - Cron jobs defined for cache cleanup and news play-count reset
+      - Production nginx applies rate limits on geo and bot webhook paths
+    contract_refs:
+      - docs/adr/003-container-strategy.md
+      - deploy/README.md
+      - docs/runbooks/stream-down.md
+    verification:
+      - pytest: tests/test_production_deploy.py
+      - pytest: tests/test_health.py
+      - pytest: tests/test_cron_cleanup.py
+      - pytest: tests/test_gateway_rate_limit.py
+      - pytest: tests/test_acceptance_spec.py
+      - e2e: tests/e2e/full-product.spec.ts
+      - manual: deploy/production smoke checklist in deploy/README.md
+    units: [U30, U31, U32, U33, U34]
+
+# TZ §12 (docs/tz.md) — each row maps to acceptance examples and primary automated gates.
+tz_section_12:
+  - area: Геотаргетинг
+    criterion: Город определяется при старте; объявления и заказы изолированы по city_tag
+    aes: [AE1, AE4, AE5, AE-ALL-FANOUT, AE-CITY-SWITCH, AE-GEO-PRIVACY, AE7]
+    verification:
+      - pytest: tests/test_geo.py tests/test_injector.py tests/test_multi_city.py tests/test_bot_order.py
+      - e2e: tests/e2e/geo-isolation.spec.ts tests/e2e/full-product.spec.ts
+
+  - area: Веб-клиент
+    criterion: Эфир без авторизации; громкость 0–100%; цвета #44EB99 и #861BE3
+    aes: [AE4, AE-NOW-PLAYING, AE-CITY-SWITCH]
+    verification:
+      - e2e: tests/e2e/full-product.spec.ts
+      - e2e: tests/e2e/geo-isolation.spec.ts
+      - pytest: tests/test_broadcast_gates.py
+
+  - area: Фон
+    criterion: Звук продолжается при сворачивании вкладки (Chrome/Firefox/Safari)
+    aes: [AE6]
+    verification:
+      - e2e: tests/e2e/geo-isolation.spec.ts (AE6 — 60s CI gate)
+      - manual: Play → background tab 10 min → confirm audio on return
+
+  - area: Новости
+    criterion: Каждые 15 мин; 1–2 мин; повтор ≤ 3/сутки без переозвучки; перебивка 3–5 сек
+    aes: [AE2, AE3, AE9]
+    verification:
+      - pytest: tests/test_news_materialize.py tests/test_news_enqueue.py tests/test_news_selection.py tests/test_news_tts.py
+      - pytest: tests/test_injector.py tests/test_metadata_news.py
+      - manual: full 15-min slot listen on dev stack
+
+  - area: Музыка
+    criterion: Заполняет эфир; playlist-rules.js меняется без правок ядра
+    aes: [AE5, AE8]
+    verification:
+      - pytest: tests/test_playlist_rules.py tests/test_buffer_worker.py tests/test_dequeue_priority.py
+      - pytest: tests/test_yandex_provider.py tests/test_broadcast_gates.py
+
+  - area: Объявления
+    criterion: Voice из Telegram после трека/новости, только для своего города
+    aes: [AE1, AE-QUEUE-FULL, AE7]
+    verification:
+      - pytest: tests/test_injector.py tests/test_ads_service.py tests/test_bot_voice_flow.py
+      - manual: Telegram voice ad → confirm → hear on target mount only
+
+  - area: Бот
+    criterion: Голосовые, /order, /playlist, /city — с подтверждением
+    aes: [AE7]
+    verification:
+      - pytest: tests/test_bot_voice_flow.py tests/test_bot_order.py tests/test_bot_playlist.py tests/test_bot_city.py
+      - pytest: tests/test_bot_webhook.py
+
+  - area: Очередь
+    criterion: Приоритет объявления > новости > музыка; без перебивания
+    aes: [AE2, AE-QUEUE-FULL, AE3, AE8, AE9]
+    verification:
+      - pytest: tests/test_dequeue_priority.py tests/test_injector.py
+      - pytest: tests/test_broadcast_gates.py (liquidsoap --check)
+
+  - area: Интеграции
+    criterion: Yandex Music proxy, TTS, Telegram webhook на сервере
+    aes: [AE8, AE9, AE7, AE-PROD-OPS]
+    verification:
+      - pytest: tests/test_yandex_provider.py tests/test_news_tts.py tests/test_bot_webhook.py
+      - pytest: tests/test_production_deploy.py tests/test_health.py
+      - manual: webhook registration via scripts/set_telegram_webhook.sh (HTTPS only)

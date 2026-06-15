@@ -132,10 +132,17 @@ describe("FM21 web player", () => {
   });
 
   it("AE-NOW-PLAYING — metadata fields visible after Play", () => {
+    ab("close");
     ab("open", `${GATEWAY_URL}/?city=moscow`);
     ab("wait", "[data-testid='play-btn']");
     ab("click", "[data-testid='play-btn']");
-    ab("wait", "5000");
+    ab("wait", "--fn", "!document.querySelector('[data-testid=\"stream\"]').paused", "15000");
+    ab(
+      "wait",
+      "--fn",
+      "(() => { const t = document.querySelector('[data-testid=\"content-type\"]')?.textContent?.trim(); return t && t !== '—'; })()",
+      "30000",
+    );
 
     const title = evalJs<string>("document.querySelector('[data-testid=\"now-title\"]')?.textContent?.trim()");
     const typeLabel = evalJs<string>(
