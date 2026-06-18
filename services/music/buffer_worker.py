@@ -61,6 +61,38 @@ class MusicBufferWorker:
         # Playlist buffer holds recent MUSIC_ORDER plays; filler may repeat tracks in queue.
         return self._buffer_track_ids(city_tag)
 
+    def _playlist_fingerprint(self, rules: ResolvedCityRules) -> str:
+        return ",".join(rules.yandex_playlist_ids)
+
+    def _sync_playlist_catalog(self, city_tag: str, rules: ResolvedCityRules) -> int:
+        """Purge stale MUSIC filler when playlist policy changes."""
+        fingerprint = self._playlist_fingerprint(rules)
+        stored = self._queue.get_playlist_fingerprint(city_tag)
+        if stored == fingerprint:
+            return 0
+
+        removed = 0
+        if stored is not None or self._queue.count_pending_music(city_tag) > 0:
+            removed = self._queue.remove_pending_items_by_type(city_tag, "MUSIC")
+            self._queue.clear_playlist_buffer(city_tag)
+            if stored is not None:
+                logger.info(
+                    "Playlist changed for %s (%s -> %s); purged %s MUSIC items",
+                    city_tag,
+                    stored,
+                    fingerprint,
+                    removed,
+                )
+            elif removed:
+                logger.info(
+                    "Purged %s stale MUSIC items for %s during playlist sync",
+                    removed,
+                    city_tag,
+                )
+
+        self._queue.set_playlist_fingerprint(city_tag, fingerprint)
+        return removed
+
     async def _load_catalog_tracks(
         self,
         provider: MusicProvider,
@@ -120,6 +152,7 @@ class MusicBufferWorker:
         async with self._session_factory()() as session:
             config = PlaylistConfigService(session)
             rules = await config.get_city_rules(city_tag)
+            self._sync_playlist_catalog(city_tag, rules)
             provider = await create_music_provider(session)
             excluded = self._collect_excluded_track_ids(city_tag)
             catalog, resolve_provider = await self._load_catalog_tracks(provider, rules)

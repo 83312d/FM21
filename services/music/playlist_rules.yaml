@@ -4,14 +4,14 @@ version: 1
 
 default:
   yandex_playlist_ids:
-    - "1904216019:1001"
+    - "1904216019:1002"
   max_track_duration_sec: 420
   blocklisted_artists: []
 
 cities:
   moscow:
     yandex_playlist_ids:
-      - "1904216019:1001"
+      - "1904216019:1002"
   spb:
     yandex_playlist_ids:
-      - "1904216019:1001"
+      - "1904216019:1002"

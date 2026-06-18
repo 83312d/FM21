@@ -9,6 +9,7 @@ import redis
 
 QUEUE_KEY_PREFIX = "fm21:queue:"
 PLAYLIST_BUFFER_KEY_PREFIX = "fm21:playlist:buffer:"
+PLAYLIST_FINGERPRINT_KEY_PREFIX = "fm21:playlist:fingerprint:"
 
 # Atomic: count pending AD items (not LLEN), reject if at capacity, else LPUSH.
 # Returns [1, new_count] on success, [0, 'QUEUE_FULL'] on capacity violation.
@@ -117,11 +118,45 @@ class QueueClient:
         raw_items = self._redis.lrange(self.queue_key(city_tag), 0, -1)
         return [json.loads(raw) for raw in raw_items]
 
+    def playlist_fingerprint_key(self, city_tag: str) -> str:
+        return f"{PLAYLIST_FINGERPRINT_KEY_PREFIX}{city_tag}"
+
+    def get_playlist_fingerprint(self, city_tag: str) -> str | None:
+        value = self._redis.get(self.playlist_fingerprint_key(city_tag))
+        return value if value else None
+
+    def set_playlist_fingerprint(self, city_tag: str, fingerprint: str) -> None:
+        self._redis.set(self.playlist_fingerprint_key(city_tag), fingerprint)
+
+    def clear_playlist_buffer(self, city_tag: str) -> None:
+        self._redis.delete(self.playlist_buffer_key(city_tag))
+
+    def remove_pending_items_by_type(self, city_tag: str, item_type: str) -> int:
+        """Drop queued items of one type; preserve relative order of the rest."""
+        key = self.queue_key(city_tag)
+        raw_items = self._redis.lrange(key, 0, -1)
+        kept: list[str] = []
+        removed = 0
+        for raw in raw_items:
+            if _item_type(raw) == item_type:
+                removed += 1
+            else:
+                kept.append(raw)
+        if removed:
+            pipe = self._redis.pipeline()
+            pipe.delete(key)
+            if kept:
+                for raw in reversed(kept):
+                    pipe.lpush(key, raw)
+            pipe.execute()
+        return removed
+
     def flush_all(self, city_tags: list[str]) -> None:
         pipe = self._redis.pipeline()
         for city in city_tags:
             pipe.delete(self.queue_key(city))
             pipe.delete(self.playlist_buffer_key(city))
+            pipe.delete(self.playlist_fingerprint_key(city))
         pipe.execute()
 
 

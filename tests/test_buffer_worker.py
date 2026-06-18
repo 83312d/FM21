@@ -186,6 +186,48 @@ async def test_dedupe_skips_playlist_buffer(buffer_worker: MusicBufferWorker, qu
     assert len(track_ids) == BUFFER_TARGET
 
 
+@pytest.mark.asyncio
+async def test_playlist_change_purges_stale_music(
+    queue_client: QueueClient,
+    active_cities: list[str],
+):
+    from services.music.rules_schema import ResolvedCityRules
+
+    worker = MusicBufferWorker(queue=queue_client, active_cities=active_cities, buffer_target=10)
+    queue_client.enqueue_item(
+        "moscow",
+        {
+            "type": "MUSIC",
+            "uri": "file:///old.mp3",
+            "priority": 10,
+            "meta": {"title": "Old", "artist": "Old", "duration_sec": 120, "track_id": "old-1"},
+        },
+    )
+    queue_client.enqueue_ad(
+        "moscow",
+        {
+            "type": "AD",
+            "uri": "file:///ad.mp3",
+            "priority": 100,
+            "meta": {"title": "Ad", "artist": "", "duration_sec": 30},
+        },
+    )
+    queue_client.set_playlist_fingerprint("moscow", "111:1")
+
+    rules = ResolvedCityRules(
+        city_tag="moscow",
+        yandex_playlist_ids=("222:2",),
+        max_track_duration_sec=420,
+        blocklisted_artists=frozenset(),
+    )
+    removed = worker._sync_playlist_catalog("moscow", rules)
+
+    assert removed == 1
+    assert queue_client.count_pending_music("moscow") == 0
+    assert queue_client.count_pending_ads("moscow") == 1
+    assert queue_client.get_playlist_fingerprint("moscow") == "222:2"
+
+
 def test_enqueue_music_via_injector(injector_client, auth_headers, queue_client):
     payload = {
         "type": "MUSIC",
