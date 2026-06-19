@@ -10,6 +10,7 @@ import redis
 QUEUE_KEY_PREFIX = "fm21:queue:"
 PLAYLIST_BUFFER_KEY_PREFIX = "fm21:playlist:buffer:"
 PLAYLIST_FINGERPRINT_KEY_PREFIX = "fm21:playlist:fingerprint:"
+PLAYLIST_CURSOR_KEY_PREFIX = "fm21:playlist:cursor:"
 
 # Atomic: count pending AD items (not LLEN), reject if at capacity, else LPUSH.
 # Returns [1, new_count] on success, [0, 'QUEUE_FULL'] on capacity violation.
@@ -128,6 +129,21 @@ class QueueClient:
     def set_playlist_fingerprint(self, city_tag: str, fingerprint: str) -> None:
         self._redis.set(self.playlist_fingerprint_key(city_tag), fingerprint)
 
+    def playlist_cursor_key(self, city_tag: str) -> str:
+        return f"{PLAYLIST_CURSOR_KEY_PREFIX}{city_tag}"
+
+    def get_catalog_cursor(self, city_tag: str) -> int:
+        value = self._redis.get(self.playlist_cursor_key(city_tag))
+        if not value:
+            return 0
+        try:
+            return max(0, int(value))
+        except ValueError:
+            return 0
+
+    def set_catalog_cursor(self, city_tag: str, index: int) -> None:
+        self._redis.set(self.playlist_cursor_key(city_tag), str(max(0, index)))
+
     def clear_playlist_buffer(self, city_tag: str) -> None:
         self._redis.delete(self.playlist_buffer_key(city_tag))
 
@@ -157,6 +173,7 @@ class QueueClient:
             pipe.delete(self.queue_key(city))
             pipe.delete(self.playlist_buffer_key(city))
             pipe.delete(self.playlist_fingerprint_key(city))
+            pipe.delete(self.playlist_cursor_key(city))
         pipe.execute()
 
 

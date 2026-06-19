@@ -58,8 +58,10 @@ class MusicBufferWorker:
         return set(self._queue.list_playlist_buffer(city_tag))
 
     def _collect_excluded_track_ids(self, city_tag: str) -> set[str]:
-        # Playlist buffer holds recent MUSIC_ORDER plays; filler may repeat tracks in queue.
-        return self._buffer_track_ids(city_tag)
+        # Recent MUSIC_ORDER plays plus tracks already waiting in the queue.
+        excluded = self._buffer_track_ids(city_tag)
+        excluded.update(self._queued_track_ids(city_tag))
+        return excluded
 
     def _playlist_fingerprint(self, rules: ResolvedCityRules) -> str:
         return ",".join(rules.yandex_playlist_ids)
@@ -75,6 +77,7 @@ class MusicBufferWorker:
         if stored is not None or self._queue.count_pending_music(city_tag) > 0:
             removed = self._queue.remove_pending_items_by_type(city_tag, "MUSIC")
             self._queue.clear_playlist_buffer(city_tag)
+            self._queue.set_catalog_cursor(city_tag, 0)
             if stored is not None:
                 logger.info(
                     "Playlist changed for %s (%s -> %s); purged %s MUSIC items",
@@ -162,7 +165,7 @@ class MusicBufferWorker:
                 return 0
 
             added = 0
-            catalog_index = 0
+            catalog_index = self._queue.get_catalog_cursor(city_tag)
             attempts = 0
             max_attempts = max(deficit * len(catalog), len(catalog))
 
@@ -195,8 +198,10 @@ class MusicBufferWorker:
                     )
                     continue
 
+                excluded.add(track.track_id)
                 added += 1
 
+            self._queue.set_catalog_cursor(city_tag, catalog_index % len(catalog))
             return added
 
     async def run_once(self) -> dict[str, int]:

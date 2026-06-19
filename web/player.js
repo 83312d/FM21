@@ -7,6 +7,7 @@
   const METADATA_POLL_MS = 5000;
   const RETRY_BASE_MS = 1000;
   const RETRY_MAX_MS = 30000;
+  const PROGRESS_TICK_MS = 250;
 
   const CONTENT_LABELS = {
     music: "Музыка",
@@ -19,23 +20,37 @@
 
   const audio = document.getElementById("stream");
   const playBtn = document.getElementById("play-btn");
+  const stopBtn = document.getElementById("stop-btn");
   const playPrompt = document.getElementById("play-prompt");
   const citySelect = document.getElementById("city-select");
   const volumeInput = document.getElementById("volume");
   const statusEl = document.getElementById("status");
-  const liveIndicator = document.getElementById("live-indicator");
   const contentTypeEl = document.getElementById("content-type");
   const titleEl = document.getElementById("now-title");
   const artistEl = document.getElementById("now-artist");
+  const listenersBadge = document.getElementById("live-indicator");
+  const listenerCountEl = document.getElementById("listener-count");
+  const progressFill = document.getElementById("progress-fill");
+  const currentTimeEl = document.getElementById("current-time");
+  const totalTimeEl = document.getElementById("total-time");
+  const volumeIcon = document.querySelector(".volume-icon svg");
+
+  const ICON_PLAY =
+    '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><polygon points="5,3 19,12 5,21" /></svg>';
+  const ICON_PAUSE =
+    '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>';
 
   let cityTag = "moscow";
   let cityName = cityByTag.get(cityTag)?.name ?? cityTag;
   let userStarted = false;
-  let isPlaying = false;
+  let stopped = false;
   let metadataTimer = null;
   let lastMetadata = null;
   let retryTimer = null;
   let retryDelay = RETRY_BASE_MS;
+  let progressTimer = null;
+  let trackDurationSec = 0;
+  let trackStartedAtMs = null;
 
   function isValidTag(tag) {
     return cityByTag.has(tag);
@@ -43,6 +58,13 @@
 
   function streamUrl(tag) {
     return `/${tag}`;
+  }
+
+  function formatTime(seconds) {
+    const safe = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(safe / 60);
+    const secs = safe % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
   function setStatus(message, isError) {
@@ -99,25 +121,109 @@
     }
   }
 
+  function updateVolumeIcon(value) {
+    if (!volumeIcon) {
+      return;
+    }
+    volumeIcon.style.opacity = String(0.4 + (value / 100) * 0.6);
+  }
+
+  function resetProgressDisplay() {
+    trackDurationSec = 0;
+    trackStartedAtMs = null;
+    progressFill.style.width = "0%";
+    currentTimeEl.textContent = "0:00";
+    totalTimeEl.textContent = "0:00";
+  }
+
+  function updateProgressFromClock() {
+    if (!trackStartedAtMs || trackDurationSec <= 0) {
+      progressFill.style.width = "0%";
+      currentTimeEl.textContent = "0:00";
+      totalTimeEl.textContent = formatTime(trackDurationSec);
+      return;
+    }
+    const elapsed = Math.min(
+      trackDurationSec,
+      Math.max(0, (Date.now() - trackStartedAtMs) / 1000),
+    );
+    const percent = (elapsed / trackDurationSec) * 100;
+    progressFill.style.width = `${Math.min(100, percent)}%`;
+    currentTimeEl.textContent = formatTime(elapsed);
+    totalTimeEl.textContent = formatTime(trackDurationSec);
+  }
+
+  function applyProgressFromPayload(payload) {
+    if (!payload || stopped) {
+      return;
+    }
+    const duration = Number(payload.duration_sec);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      resetProgressDisplay();
+      return;
+    }
+    trackDurationSec = duration;
+    const parsed = payload.started_at ? Date.parse(payload.started_at) : NaN;
+    trackStartedAtMs = Number.isFinite(parsed) ? parsed : null;
+    updateProgressFromClock();
+    if (!stopped && trackStartedAtMs) {
+      startProgressTicker();
+    }
+  }
+
+  function startProgressTicker() {
+    stopProgressTicker();
+    progressTimer = setInterval(() => {
+      if (stopped || !trackStartedAtMs || trackDurationSec <= 0) {
+        return;
+      }
+      updateProgressFromClock();
+    }, PROGRESS_TICK_MS);
+  }
+
+  function stopProgressTicker() {
+    if (progressTimer) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+  }
+
+  function hideListenersBadge() {
+    if (listenersBadge) {
+      listenersBadge.hidden = true;
+    }
+  }
+
+  function showListenersBadge() {
+    if (listenersBadge) {
+      listenersBadge.hidden = false;
+    }
+  }
+
+  function setListenerCount(count) {
+    listenerCountEl.textContent = String(count);
+    showListenersBadge();
+  }
+
   function applyCity(tag, name) {
     cityTag = tag;
     cityName = name || cityByTag.get(tag)?.name || tag;
     citySelect.value = tag;
     persistCity(tag);
     setStatus("");
-    connectStream(userStarted);
+    connectStream(userStarted && !stopped);
     fetchNowPlaying();
-    if (userStarted) {
+    if (userStarted && !stopped) {
+      fetchListeners();
       startMetadataPolling();
     }
   }
 
   function updatePlayUi() {
-    const playing = !audio.paused && !audio.ended;
-    isPlaying = playing;
-    playBtn.textContent = playing ? "⏸ Pause" : "▶ Play";
-    playBtn.setAttribute("aria-label", playing ? "Пауза" : "Воспроизвести");
-    liveIndicator.hidden = !playing;
+    const playing = userStarted && !audio.paused && !audio.ended && !stopped;
+    playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    playBtn.classList.toggle("is-playing", playing);
+    playBtn.setAttribute("aria-label", playing ? "Приостановить" : "Воспроизвести");
     playPrompt.hidden = !(userStarted && !playing && audio.src);
   }
 
@@ -133,7 +239,7 @@
     setStatus(`Повтор подключения через ${Math.round(retryDelay / 1000)} с…`, true);
     retryTimer = setTimeout(() => {
       retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
-      connectStream(userStarted);
+      connectStream(userStarted && !stopped);
     }, retryDelay);
   }
 
@@ -159,6 +265,8 @@
             playPrompt.hidden = true;
             updatePlayUi();
             startMetadataPolling();
+            startProgressTicker();
+            fetchListeners();
           })
           .catch(() => {
             playPrompt.hidden = false;
@@ -177,13 +285,14 @@
   }
 
   function renderMetadata(payload) {
-    if (!payload) {
+    if (!payload || stopped) {
       return;
     }
     lastMetadata = payload;
     contentTypeEl.textContent = CONTENT_LABELS[payload.content_type] || payload.content_type;
     titleEl.textContent = payload.title || "FM21";
     artistEl.textContent = payload.artist || "";
+    applyProgressFromPayload(payload);
   }
 
   async function fetchNowPlaying() {
@@ -191,13 +300,23 @@
       const payload = await fetchJson(`/api/now-playing/${encodeURIComponent(cityTag)}`);
       renderMetadata(payload);
     } catch (_err) {
-      if (lastMetadata) {
+      if (lastMetadata && !stopped) {
         renderMetadata(lastMetadata);
-      } else {
+      } else if (!stopped) {
         contentTypeEl.textContent = "—";
         titleEl.textContent = "Эфир";
         artistEl.textContent = "";
+        resetProgressDisplay();
       }
+    }
+  }
+
+  async function fetchListeners() {
+    try {
+      const payload = await fetchJson(`/api/listeners/${encodeURIComponent(cityTag)}`);
+      setListenerCount(payload.listeners);
+    } catch (_err) {
+      hideListenersBadge();
     }
   }
 
@@ -208,8 +327,8 @@
   function startMetadataPolling() {
     stopMetadataPolling();
     const tick = async () => {
-      if (userStarted) {
-        await fetchNowPlaying();
+      if (!stopped) {
+        await Promise.all([fetchNowPlaying(), fetchListeners()]);
       }
       metadataTimer = setTimeout(tick, metadataInterval());
     };
@@ -282,11 +401,35 @@
     };
   }
 
+  function resetStoppedUi() {
+    stopped = false;
+    resetProgressDisplay();
+    hideListenersBadge();
+    fetchNowPlaying();
+  }
+
+  function handleStop() {
+    userStarted = false;
+    stopped = true;
+    audio.pause();
+    stopMetadataPolling();
+    stopProgressTicker();
+    resetProgressDisplay();
+    setListenerCount(0);
+    titleEl.textContent = "Эфир остановлен";
+    artistEl.textContent = "———";
+    setStatus("");
+    updatePlayUi();
+  }
+
   async function init() {
     populateCitySelect(cityTag);
     const volume = readStoredVolume();
     volumeInput.value = String(volume);
     audio.volume = volume / 100;
+    updateVolumeIcon(volume);
+    resetProgressDisplay();
+    hideListenersBadge();
 
     try {
       const resolved = await detectCity();
@@ -304,29 +447,43 @@
     audio.src = streamUrl(cityTag);
     updatePlayUi();
     await fetchNowPlaying();
+    await fetchListeners();
+    startMetadataPolling();
   }
 
   playBtn.addEventListener("click", async () => {
+    if (stopped) {
+      resetStoppedUi();
+    }
+
     if (!audio.paused && !audio.ended) {
       audio.pause();
       userStarted = false;
       stopMetadataPolling();
+      stopProgressTicker();
       updatePlayUi();
       return;
     }
 
     userStarted = true;
+    stopped = false;
     playPrompt.hidden = true;
     try {
       await audio.play();
       retryDelay = RETRY_BASE_MS;
       setStatus("");
       startMetadataPolling();
+      startProgressTicker();
+      fetchListeners();
     } catch (_err) {
       playPrompt.hidden = false;
       setStatus("Нажмите Play для начала воспроизведения", true);
     }
     updatePlayUi();
+  });
+
+  stopBtn.addEventListener("click", () => {
+    handleStop();
   });
 
   citySelect.addEventListener("change", () => {
@@ -341,6 +498,7 @@
     const value = Number(volumeInput.value);
     audio.volume = value / 100;
     persistVolume(value);
+    updateVolumeIcon(value);
   });
 
   audio.addEventListener("playing", () => {
@@ -363,7 +521,7 @@
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (userStarted && metadataTimer) {
+    if (metadataTimer) {
       stopMetadataPolling();
       startMetadataPolling();
     }

@@ -9,10 +9,12 @@ from contextlib import asynccontextmanager
 import redis
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from services.common.logging import configure_json_logging
 from services.geo.cities import CityRegistry, load_registry
 from services.metadata.health import deep_status, public_status
+from services.metadata.listeners import read_listener_count
 from services.metadata.now_playing import read_now_playing
 from services.metadata.queue_reader import read_queue_preview
 
@@ -36,6 +38,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FM21 Metadata API", version="0.1.0", lifespan=lifespan)
+
+
+class ListenersResponse(BaseModel):
+    city_tag: str
+    listeners: int
 
 
 @app.get("/api/health")
@@ -67,6 +74,23 @@ def now_playing(city_tag: str):
         result.remaining_sec,
     )
     return result
+
+
+@app.get("/api/listeners/{city_tag}")
+def listeners(city_tag: str):
+    registry: CityRegistry = app.state.registry
+    if registry.get(city_tag) is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "unknown_city",
+                "message": "cityTag is not an active broadcast city",
+            },
+        )
+    count = read_listener_count(city_tag)
+    listeners_count = count if count is not None else 0
+    logger.info("listeners city_tag=%s listeners=%s", city_tag, listeners_count)
+    return ListenersResponse(city_tag=city_tag, listeners=listeners_count)
 
 
 @app.get("/api/queue/{city_tag}")

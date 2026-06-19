@@ -1,189 +1,405 @@
+/* ===== Глобальные переменные (взяты из CSS 21-school.ru) ===== */
 :root {
-  --fm21-accent: #44EB99;
-  --fm21-primary: #861BE3;
-  --fm21-bg: #0d0d12;
-  --fm21-text: #ffffff;
+    --font-main: 'Inter', 'SBSansDisplay', sans-serif;
+    --accent-color: #00db00;
+    --accent-color-opacity-10: rgba(0, 219, 0, 0.1);
+    --accent-color-opacity-28: rgba(0, 219, 0, 0.28);
+    --dark-color: #1d2633;
+    --white-color: #ffffff;
+    --light-gray-color: #c6cfda;
+    --light-gray-bg: #f4f4f9;
+    --text-color: var(--dark-color);
+    --dark-bg-start: #1a222d;
+    --dark-bg-end: #334048;
+    --fm21-accent: #44eb99;
+    --fm21-primary: #861be3;
 }
 
+/* ===== Сброс и база ===== */
 *,
 *::before,
 *::after {
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
 }
 
 body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: radial-gradient(circle at top left, #1a1030 0%, var(--fm21-bg) 45%);
-  color: var(--fm21-text);
+    min-width: 320px;
+    min-height: 100vh;
+    max-width: 2400px;
+    margin: 0 auto;
+    font-family: var(--font-main);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-color);
+    background: var(--white-color);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
-.player {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 2rem 1.25rem 3rem;
-  display: grid;
-  gap: 1.5rem;
+/* ===== Карточка плеера ===== */
+.radio-card {
+    width: 100%;
+    max-width: 560px;
+    background: radial-gradient(ellipse at 30% 20%, #1a222d 0%, #334048 100%);
+    border-radius: 50px;
+    padding: 40px 32px 36px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 0.3s ease;
+    color: var(--white-color);
 }
 
-.player__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+/* ===== Хедер с логотипом ===== */
+.radio-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
 }
 
-.player__logo {
-  display: inline-block;
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  background: linear-gradient(90deg, var(--fm21-accent), var(--fm21-primary));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.logo-block {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.player__tagline {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 0.85rem;
-  opacity: 0.75;
-  max-width: 22rem;
+.logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--accent-color);
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--dark-color);
+    flex-shrink: 0;
 }
 
-.player__city {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.logo-text {
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+    color: var(--white-color);
+}
+.logo-text span {
+    color: var(--accent-color);
 }
 
-.player__city-label {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
+.listeners-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(2px);
+    padding: 6px 16px 6px 14px;
+    border-radius: 40px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.listeners-badge .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    animation: pulse-dot 1.8s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+    0% { opacity: 0.4; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* ===== Инфо о треке ===== */
+.track-info {
+    margin-bottom: 28px;
+    text-align: left;
+}
+.track-label {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--light-gray-color);
+    opacity: 0.7;
+    margin-bottom: 4px;
+}
+.track-title {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--white-color);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.track-artist {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--light-gray-color);
+    opacity: 0.8;
+}
+
+/* ===== Элементы управления ===== */
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+}
+
+.btn-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    border: none;
+    cursor: pointer;
+    transition: background 0.25s ease, transform 0.2s ease;
+    flex-shrink: 0;
+    color: var(--dark-color);
+}
+.btn-play:hover {
+    background: #00c200;
+    transform: scale(1.02);
+}
+.btn-play:active {
+    transform: scale(0.94);
+}
+.btn-play svg {
+    display: block;
+    width: 28px;
+    height: 28px;
+    fill: currentColor;
+}
+
+.btn-play.is-playing svg {
+    /* иконка паузы (две вертикальные полосы) */
+}
+
+/* кнопка стоп (остановка эфира) */
+.btn-stop {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--white-color);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    flex-shrink: 0;
+    backdrop-filter: blur(2px);
+}
+.btn-stop:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+.btn-stop:active {
+    background: rgba(255, 255, 255, 0.18);
+}
+.btn-stop svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+/* ползунок громкости */
+.volume-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    flex: 1 1 140px;
+    min-width: 120px;
+}
+.volume-icon {
+    opacity: 0.6;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+.volume-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--white-color);
+}
+
+.volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    transition: background 0.2s;
+}
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: 2px solid var(--white-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s;
+}
+.volume-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.08);
+}
+.volume-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: 2px solid var(--white-color);
+}
+
+/* ===== Прогресс-бар (декоративный) ===== */
+.progress-area {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.progress-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.10);
+    position: relative;
+    overflow: hidden;
+}
+.progress-fill {
+    width: 37%;
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+.time-label {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--light-gray-color);
+    opacity: 0.7;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+
+/* ===== Адаптив ===== */
+@media (max-width: 540px) {
+    .radio-card {
+        padding: 28px 18px 28px;
+        border-radius: 32px;
+    }
+    .logo-text {
+        font-size: 18px;
+    }
+    .track-title {
+        font-size: 22px;
+    }
+    .controls {
+        gap: 12px;
+    }
+    .btn-play {
+        width: 56px;
+        height: 56px;
+    }
+    .btn-play svg {
+        width: 24px;
+        height: 24px;
+    }
+    .volume-wrap {
+        flex: 1 1 100px;
+        min-width: 80px;
+    }
+    .listeners-badge {
+        font-size: 12px;
+        padding: 4px 12px 4px 10px;
+    }
+    .btn-stop {
+        font-size: 12px;
+        padding: 8px 14px;
+    }
+}
+
+@media (max-width: 440px) {
+    .radio-header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .listeners-badge {
+        margin-left: auto;
+    }
+    .controls {
+        flex-wrap: wrap;
+    }
+    .volume-wrap {
+        flex: 1 1 100%;
+        margin-left: 0;
+    }
+}
+
+.logo-img {
+    height: 44px;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 #city-select {
-  min-width: 12rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--fm21-text);
-  font-size: 1rem;
+    display: none !important;
 }
 
-.player__live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--fm21-accent);
-  margin-bottom: 0.5rem;
+#status:empty {
+    display: none;
 }
 
-.player__live-dot {
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  background: var(--fm21-accent);
-  animation: pulse 1.4s ease-in-out infinite;
+#status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--light-gray-color);
+    opacity: 0.7;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
+#status.player__status--error {
+    color: #ff8f8f;
     opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.85);
-  }
-}
-
-.player__content-type {
-  margin: 0 0 0.35rem;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  opacity: 0.65;
-}
-
-.player__title {
-  margin: 0;
-  font-size: 1.6rem;
-  line-height: 1.25;
-}
-
-.player__artist {
-  margin: 0.35rem 0 0;
-  opacity: 0.8;
-}
-
-.player__controls {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.player__play {
-  width: fit-content;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 999px;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  color: var(--fm21-bg);
-  background: linear-gradient(90deg, var(--fm21-accent), var(--fm21-primary));
-}
-
-.player__play:focus-visible,
-#city-select:focus-visible,
-#volume:focus-visible {
-  outline: 2px solid var(--fm21-accent);
-  outline-offset: 2px;
-}
-
-.player__prompt {
-  margin: 0;
-  color: var(--fm21-accent);
-  font-size: 0.95rem;
-}
-
-.player__volume-label {
-  display: grid;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-}
-
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--fm21-accent);
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  background: var(--fm21-accent);
-}
-
-input[type="range"]::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, var(--fm21-accent), var(--fm21-primary));
-}
-
-.player__status {
-  min-height: 1.25rem;
-  margin: 0;
-  font-size: 0.85rem;
-  opacity: 0.75;
-}
-
-.player__status--error {
-  color: #ff8f8f;
-  opacity: 1;
 }

@@ -177,6 +177,30 @@ async def test_provider_failure_uses_static_fallback(
 
 
 @pytest.mark.asyncio
+async def test_replenish_rotates_catalog_cursor(
+    buffer_worker: MusicBufferWorker,
+    queue_client: QueueClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Repeated single-track replenishment must not flood the queue with catalog[0]."""
+    monkeypatch.setenv("STATIC_MUSIC_DIR", str(STATIC_MUSIC_DIR))
+    worker = MusicBufferWorker(
+        queue=buffer_worker._queue,
+        active_cities=buffer_worker._active_cities,
+        buffer_target=3,
+    )
+    await worker.fill_city("moscow")
+
+    for _ in range(15):
+        queue_client._redis.rpop(queue_client.queue_key("moscow"))
+        await worker.fill_city("moscow")
+
+    track_ids = [item["meta"]["track_id"] for item in queue_client.list_items("moscow")]
+    assert len(track_ids) == 3
+    assert len(set(track_ids)) == 3
+
+
+@pytest.mark.asyncio
 async def test_dedupe_skips_playlist_buffer(buffer_worker: MusicBufferWorker, queue_client: QueueClient):
     queue_client.record_playlist_buffer("moscow", "bed-01")
     await buffer_worker.fill_city("moscow")

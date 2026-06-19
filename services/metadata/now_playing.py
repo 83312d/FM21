@@ -37,13 +37,25 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _parse_epoch_seconds(stripped: str) -> float | None:
+    if stripped.isdigit():
+        return float(stripped)
+    try:
+        return float(stripped)
+    except ValueError:
+        return None
+
+
 def _parse_started_at(raw: str | None) -> str:
     if not raw:
         return utc_now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
     stripped = raw.strip()
-    if stripped.isdigit():
-        ts = int(stripped)
-        return datetime.fromtimestamp(ts, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    epoch = _parse_epoch_seconds(stripped)
+    if epoch is not None:
+        started = datetime.fromtimestamp(epoch, tz=UTC)
+        if stripped.isdigit():
+            started = started.replace(microsecond=0)
+        return started.isoformat().replace("+00:00", "Z")
     if stripped.endswith("Z"):
         return stripped
     try:
@@ -59,8 +71,9 @@ def _parse_started_at_dt(raw: str | None) -> datetime | None:
     if not raw:
         return None
     stripped = raw.strip()
-    if stripped.isdigit():
-        return datetime.fromtimestamp(int(stripped), tz=UTC)
+    epoch = _parse_epoch_seconds(stripped)
+    if epoch is not None:
+        return datetime.fromtimestamp(epoch, tz=UTC)
     try:
         parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
